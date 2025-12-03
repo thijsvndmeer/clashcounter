@@ -1,4 +1,4 @@
-https://github.io/thijsvndmeer/clashcounter
+https://thijsvndmeer.github.io/clashcounter/
 
 # Run and deploy your AI Studio app
 
