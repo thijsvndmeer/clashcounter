@@ -4,10 +4,24 @@ import { useGameStore } from '../store/gameStore';
 import { calculateCardLikelihoods } from '../utils/deckLogic';
 
 export const CardGrid: React.FC = () => {
-  const { seenCards, addSeenCard, isOverlayMode } = useGameStore();
+  const { seenCards, addSeenCard, isOverlayMode, definitiveDeck } = useGameStore();
   const [filter, setFilter] = useState('');
 
+  const isDeckLocked = Boolean(definitiveDeck && definitiveDeck.length === 8);
+
   const { sortedCards, likelihoodRatings } = useMemo(() => {
+    if (isDeckLocked && definitiveDeck) {
+      const order = new Map(definitiveDeck.map((card, idx) => [card, idx]));
+      const deckCards = CARDS
+        .filter((card) => order.has(card.name))
+        .sort((a, b) => (order.get(a.name) || 0) - (order.get(b.name) || 0));
+
+      return {
+        sortedCards: deckCards,
+        likelihoodRatings: {} as Record<string, number>,
+      };
+    }
+
     // If game hasn't really started (no cards seen), default sort by Elixir -> Name
     if (seenCards.length === 0) {
       return {
@@ -37,19 +51,56 @@ export const CardGrid: React.FC = () => {
     });
 
     return { sortedCards: sorted, likelihoodRatings: normalized };
-  }, [seenCards]);
+  }, [definitiveDeck, isDeckLocked, seenCards]);
 
-  const filteredCards = sortedCards.filter(c => 
-    c.name.toLowerCase().includes(filter.toLowerCase())
-  );
+  const filteredCards = useMemo(() => {
+    if (isDeckLocked) return sortedCards;
+
+    return sortedCards.filter(c =>
+      c.name.toLowerCase().includes(filter.toLowerCase())
+    );
+  }, [filter, isDeckLocked, sortedCards]);
 
   const handleCardClick = (card: Card) => {
+    if (isDeckLocked && definitiveDeck && !definitiveDeck.includes(card.name)) return;
     addSeenCard(card.name, card.elixir);
     if (filter) setFilter('');
   };
 
   // OVERLAY MODE LAYOUT (Horizontal Scroll)
   if (isOverlayMode) {
+    if (isDeckLocked) {
+      return (
+        <div className="w-full p-1">
+          <div className="grid grid-cols-4 gap-1">
+            {filteredCards.map((card) => {
+              const isSeen = seenCards.includes(card.name);
+              return (
+                <button
+                  key={card.id}
+                  onClick={() => handleCardClick(card)}
+                  className={`
+                    flex flex-col items-center justify-center rounded border transition-all active:scale-95
+                    w-full aspect-[3/4]
+                    ${isSeen
+                      ? 'bg-gray-800/80 border-fuchsia-500/50'
+                      : 'bg-black/40 border-gray-600/50 hover:bg-gray-700/50'}
+                  `}
+                >
+                  <span className={`font-bold text-[10px] ${isSeen ? 'text-fuchsia-300' : 'text-fuchsia-400'}`}>
+                    {card.elixir}
+                  </span>
+                  <span className="text-[8px] text-center leading-tight px-0.5 text-gray-200 mt-0.5 line-clamp-2">
+                    {card.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
     return (
         <div className="w-full overflow-hidden">
             {/* Horizontal Scroll Container */}
@@ -101,17 +152,24 @@ export const CardGrid: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-gray-900">
         <div className="p-2 border-b border-gray-800">
-            <input 
-                type="text" 
-                placeholder="Search..." 
+          {isDeckLocked ? (
+            <div className="flex items-center justify-between text-xs text-amber-200">
+              <span>Opponent deck locked</span>
+              <span className="text-[10px] text-gray-400">8 cards</span>
+            </div>
+          ) : (
+            <input
+                type="text"
+                placeholder="Search..."
                 className="w-full bg-gray-800 text-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-fuchsia-500 text-sm px-3 py-2"
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
             />
+          )}
         </div>
-        
-        <div className="flex-1 overflow-y-auto p-2">
-            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+
+        <div className={`${isDeckLocked ? 'p-3' : 'flex-1 overflow-y-auto p-2'}`}>
+            <div className={`grid ${isDeckLocked ? 'grid-cols-4 gap-3' : 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2'}`}>
                 {filteredCards.map((card) => {
                   const isSeen = seenCards.includes(card.name);
                   const rating = likelihoodRatings[card.name];
@@ -121,8 +179,8 @@ export const CardGrid: React.FC = () => {
                         onClick={() => handleCardClick(card)}
                         className={`
                             flex flex-col items-center justify-between rounded border transition-all active:scale-95 p-1 aspect-[3/4]
-                            ${isSeen 
-                                ? 'bg-gray-800 border-fuchsia-500/50 shadow-[0_0_10px_rgba(192,38,211,0.15)]' 
+                            ${isSeen
+                                ? 'bg-gray-800 border-fuchsia-500/50 shadow-[0_0_10px_rgba(192,38,211,0.15)]'
                                 : 'bg-gray-800 border-gray-700 hover:border-fuchsia-500 hover:bg-gray-750'}
                         `}
                         >
@@ -139,18 +197,20 @@ export const CardGrid: React.FC = () => {
                             </div>
 
                             {/* Likelihood Badge */}
-                            <div className="w-full flex justify-between items-center mt-1">
-                              {renderLikelihoodBadge(card.name)}
-                              <div className={`w-10 h-1 rounded-full ${
-                                rating === undefined
-                                  ? 'bg-gray-700'
-                                  : rating >= 80
-                                    ? 'bg-green-500'
-                                    : rating >= 50
-                                      ? 'bg-yellow-400'
-                                      : 'bg-gray-500'
-                              }`} />
-                            </div>
+                            {!isDeckLocked && (
+                              <div className="w-full flex justify-between items-center mt-1">
+                                {renderLikelihoodBadge(card.name)}
+                                <div className={`w-10 h-1 rounded-full ${
+                                  rating === undefined
+                                    ? 'bg-gray-700'
+                                    : rating >= 80
+                                      ? 'bg-green-500'
+                                      : rating >= 50
+                                        ? 'bg-yellow-400'
+                                        : 'bg-gray-500'
+                                }`} />
+                              </div>
+                            )}
 
                             {/* Rarity Bar */}
                             <div className={`w-full h-1 rounded-full mt-1 ${
@@ -163,7 +223,7 @@ export const CardGrid: React.FC = () => {
                   );
                 })}
             </div>
-            
+
             {filteredCards.length === 0 && (
                 <div className="text-center text-gray-500 mt-10">No cards</div>
             )}
