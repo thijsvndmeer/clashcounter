@@ -1,4 +1,5 @@
 import { Deck, META_DECKS } from '../data/decks';
+import { CARD_USAGE_STATS } from '../data/cardUsageStats';
 
 export interface DeckPrediction {
   deck: Deck;
@@ -78,28 +79,49 @@ export const calculateCardLikelihoods = (seenCards: string[]): CardLikelihoods =
 
     // Deck confidence rewards strong matches and penalizes mismatches,
     // with a slight boost for the most likely deck in the list.
-    const deckConfidence = Math.max(matchRatio - mismatches * 0.07, 0);
-    const topDeckBoost = predictionIndex === 0 ? 1.15 : 1;
-    const deckWeight = Math.pow(deckConfidence + 0.08, 2) * topDeckBoost;
+    const deckConfidence = Math.max(matchRatio - mismatches * 0.09, 0);
+    const topDeckBoost = predictionIndex === 0 ? 1.18 : 1;
+    const mismatchDrag = 1 - Math.min(0.35, mismatches * 0.07);
+    const deckWeight = Math.pow(deckConfidence + 0.1, 2) * topDeckBoost * mismatchDrag;
 
     prediction.deck.cards.forEach((cardName) => {
       const lastSeen = lastSeenIndex.has(cardName) ? lastSeenIndex.get(cardName)! : -1;
       const playsSinceSeen = lastSeen === -1 ? totalPlays : totalPlays - lastSeen - 1;
+      const usageStats = CARD_USAGE_STATS[cardName];
+      const popularity = usageStats?.usageRate ?? 0.18;
+      const expectedCycle = usageStats?.avgCycleLength ?? 4.0;
 
-      // A card returns to hand roughly 4 plays after being used. The closer
-      // we are to that point, the higher the cycleFactor becomes.
-      const distanceToCycle = lastSeen === -1 ? 3 : Math.max(0, 4 - playsSinceSeen);
-      const cycleFactor = 1 / (1 + distanceToCycle);
+      // Respect the Clash Royale draw rule: a card cannot be redrawn until four
+      // other cards have been played. While unseen cards are exempt, recently used
+      // cards are clamped to zero probability until their cooldown expires.
+      const requiredGap = Math.max(4, Math.round(expectedCycle));
+      const cycleReady = lastSeen === -1 ? true : playsSinceSeen >= requiredGap;
+      const cooldownPenalty = cycleReady ? 1 : 0;
+
+      // Once the card clears the hard gate, ramp its urgency as it approaches
+      // the expected cycle point and taper it as it lingers deep in the deck.
+      const overshoot = lastSeen === -1 ? 0 : Math.max(0, playsSinceSeen - requiredGap);
+      const cycleMomentum = lastSeen === -1 ? 1.05 : 1 + Math.min(0.6, overshoot * 0.12);
 
       // Unseen cards are urgent to surface; cards missing from the deck get a bump.
-      const unseenBonus = lastSeen === -1 ? 1.2 : 1;
-      const missingBonus = prediction.missingCards.includes(cardName) ? 1.1 : 0.95;
+      const unseenBonus = lastSeen === -1 ? 1.25 : 1;
+      const missingBonus = prediction.missingCards.includes(cardName) ? 1.2 : 0.9;
 
       // Long downtime after being seen suggests a hand backfill is imminent but
       // we avoid runaway growth by slightly damping extremely old sightings.
-      const fatiguePenalty = Math.max(0.7, 1 - Math.max(0, playsSinceSeen - 8) * 0.02);
+      const fatiguePenalty = Math.max(0.65, 1 - Math.max(0, playsSinceSeen - 9) * 0.03);
 
-      const cardScore = deckWeight * cycleFactor * unseenBonus * missingBonus * fatiguePenalty;
+      // Popular, frequently cycled cards should start with a stronger prior.
+      const popularityPrior = 0.65 + popularity * 0.8;
+
+      const cardScore =
+        deckWeight *
+        cooldownPenalty *
+        cycleMomentum *
+        unseenBonus *
+        missingBonus *
+        fatiguePenalty *
+        popularityPrior;
 
       likelihoodAccumulator[cardName] = (likelihoodAccumulator[cardName] || 0) + cardScore;
     });
