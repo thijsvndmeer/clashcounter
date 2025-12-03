@@ -53,26 +53,24 @@ const App: React.FC = () => {
   // --- OVERLAY MODE RENDER ---
   if (isOverlayMode) {
     return (
-      // Transparent root container that covers the screen but allows pointer events to pass through 
-      // where the widget isn't. However, in a web view, usually the whole body is the view.
-      // We make the background transparent.
-      <div className="min-h-screen w-full bg-transparent overflow-hidden">
-        <div 
-            className="fixed flex flex-col w-64 rounded-xl border border-gray-600/50 bg-black/80 backdrop-blur-md shadow-2xl overflow-hidden touch-none"
-            style={{ 
-                left: position.x, 
+      // Full-screen transparent overlay so the widget floats above the game on Android
+      <div className="fixed inset-0 z-50 bg-transparent pointer-events-none">
+        <div
+            className="absolute flex flex-col w-64 rounded-xl border border-gray-600/50 bg-black/85 backdrop-blur-md shadow-2xl overflow-hidden touch-none pointer-events-auto"
+            style={{
+                left: position.x,
                 top: position.y,
-                cursor: isDragging ? 'grabbing' : 'grab' 
+                cursor: isDragging ? 'grabbing' : 'grab'
             }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
         >
             {/* Row 1: Controls (Drag Handle) */}
-            <div className="flex justify-between items-center p-1.5 bg-gray-800/50 border-b border-gray-700/50 select-none">
+            <div className="flex justify-between items-center p-1.5 bg-gray-800/60 border-b border-gray-700/50 select-none">
                 <div className="flex gap-2">
                     {/* Play/Pause */}
-                    <button 
+                    <button
                         onClick={togglePlay}
                         className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold ${isPlaying ? 'bg-yellow-600/90 text-white' : 'bg-green-600/90 text-white'}`}
                     >
@@ -94,6 +92,15 @@ const App: React.FC = () => {
                     <div className="w-1 h-1 rounded-full bg-gray-400"></div>
                     <div className="w-1 h-1 rounded-full bg-gray-400"></div>
                 </div>
+
+                {/* Close Overlay */}
+                <button
+                  onClick={toggleOverlayMode}
+                  className="w-6 h-6 ml-2 rounded-full bg-gray-700/80 text-gray-200 flex items-center justify-center text-[10px] font-bold"
+                  aria-label="Close overlay"
+                >
+                  ✕
+                </button>
             </div>
 
             {/* Row 2: Elixir Bar */}
