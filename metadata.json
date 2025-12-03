@@ -1,0 +1,5 @@
+{
+  "name": "CR Elixir & Deck Tracker",
+  "description": "A clash royale companion web app with manual elixir tracking and automatic deck prediction.",
+  "requestFramePermissions": []
+}
