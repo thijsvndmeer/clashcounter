@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { predictDecks } from '../utils/deckLogic';
+import { calculateCardLikelihoods, predictDecks } from '../utils/deckLogic';
 
 export const DeckPredictor: React.FC = () => {
   const { seenCards, isOverlayMode } = useGameStore();
 
   const predictions = useMemo(() => predictDecks(seenCards), [seenCards]);
+  const likelihoods = useMemo(() => calculateCardLikelihoods(seenCards), [seenCards]);
   
   // COMPLETELY HIDE in Overlay Mode as requested
   if (isOverlayMode) {
@@ -24,6 +25,10 @@ export const DeckPredictor: React.FC = () => {
 
   const topMatch = predictions[0];
   const isStrongMatch = topMatch.matchScore >= 4;
+
+  const rankedMissingCards = topMatch.missingCards
+    .slice()
+    .sort((a, b) => (likelihoods.scores[b] || 0) - (likelihoods.scores[a] || 0));
 
   return (
     <div className="p-4 bg-gray-900 border-b border-gray-700">
@@ -48,9 +53,12 @@ export const DeckPredictor: React.FC = () => {
             {topMatch.missingCards.length === 0 ? (
                 <span className="text-xs text-green-400">Full deck rotation known!</span>
             ) : (
-                topMatch.missingCards.map((card) => (
+                rankedMissingCards.map((card) => (
                 <span key={card} className="bg-gray-700 text-gray-200 text-xs px-2 py-1 rounded border border-gray-600">
                     {card}
+                    {likelihoods.normalized[card] !== undefined && (
+                      <span className="ml-1 text-[10px] text-amber-200 font-semibold">{likelihoods.normalized[card]}%</span>
+                    )}
                 </span>
                 ))
             )}
