@@ -3,10 +3,16 @@ import { useGameStore } from '../store/gameStore';
 import { calculateCardLikelihoods, predictDecks } from '../utils/deckLogic';
 
 export const DeckPredictor: React.FC = () => {
-  const { seenCards, isOverlayMode } = useGameStore();
+  const { seenCards, isOverlayMode, currentElixir } = useGameStore();
+
+  // Recompute predictions every whole elixir to mirror in-game timing cadence
+  const elixirPulse = Math.floor(currentElixir);
 
   const predictions = useMemo(() => predictDecks(seenCards), [seenCards]);
-  const likelihoods = useMemo(() => calculateCardLikelihoods(seenCards), [seenCards]);
+  const likelihoods = useMemo(
+    () => calculateCardLikelihoods(seenCards, currentElixir),
+    [seenCards, elixirPulse]
+  );
   
   // COMPLETELY HIDE in Overlay Mode as requested
   if (isOverlayMode) {

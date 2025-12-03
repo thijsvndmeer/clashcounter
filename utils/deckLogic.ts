@@ -1,5 +1,6 @@
 import { Deck, META_DECKS } from '../data/decks';
 import { CARD_USAGE_STATS } from '../data/cardUsageStats';
+import { CARDS } from '../data/cards';
 
 export interface DeckPrediction {
   deck: Deck;
@@ -61,10 +62,82 @@ export const predictDecks = (seenCards: string[]): DeckPrediction[] => {
  * - Missing card urgency (cards we haven't seen yet get a bump)
  * - Recency penalty/bonus (recently cycled cards are more imminent)
  */
-export const calculateCardLikelihoods = (seenCards: string[]): CardLikelihoods => {
+interface TempoProfile {
+  /**
+   * How willingly a card is used as an opener or early pressure tool (0-1).
+   * Hog Rider, Goblin Barrel, Miner, etc. all skew high here.
+   */
+  openingAggro: number;
+  /**
+   * How much the card accelerates when the opponent is floating elixir. Beatdown
+   * units like Golem or Lava Hound want a heavier push once 8-10 elixir is banked.
+   */
+  beatdownThreshold?: number;
+  beatdownWeight?: number;
+  /**
+   * How much the card wants to be cycled quickly again once it's ready.
+   */
+  cycleBias?: number;
+  /**
+   * Extra incentive to show up as the first appearance of the archetype's win condition.
+   */
+  firstStrikeBonus?: number;
+  /**
+   * Cards that punish elixir overflow (spawners, collectors) when the opponent is about to leak.
+   */
+  overflowGreed?: number;
+}
+
+const CARD_COST_LOOKUP = new Map<string, number>(CARDS.map((card) => [card.name, card.elixir]));
+
+const DEFAULT_TEMPO_PROFILE: TempoProfile = {
+  openingAggro: 0.2,
+  beatdownThreshold: 7.5,
+  beatdownWeight: 0.08,
+  cycleBias: 0.1,
+  firstStrikeBonus: 0.05,
+  overflowGreed: 0.05,
+};
+
+const CARD_TEMPO_PROFILES: Record<string, TempoProfile> = {
+  // Fast pressure / openers
+  'Hog Rider': { openingAggro: 0.95, cycleBias: 0.45, firstStrikeBonus: 0.3 },
+  'Miner': { openingAggro: 0.8, cycleBias: 0.35, firstStrikeBonus: 0.18 },
+  'Goblin Barrel': { openingAggro: 0.78, cycleBias: 0.28, firstStrikeBonus: 0.22 },
+  'Wall Breakers': { openingAggro: 0.7, cycleBias: 0.35, firstStrikeBonus: 0.18 },
+  'Battle Ram': { openingAggro: 0.65, cycleBias: 0.25, firstStrikeBonus: 0.12 },
+
+  // Beatdown / heavy push cards
+  'Golem': { openingAggro: 0.05, beatdownThreshold: 8.3, beatdownWeight: 0.24, overflowGreed: 0.25 },
+  'Lava Hound': { openingAggro: 0.12, beatdownThreshold: 8.0, beatdownWeight: 0.2, overflowGreed: 0.18 },
+  'P.E.K.K.A': { openingAggro: 0.08, beatdownThreshold: 7.5, beatdownWeight: 0.22 },
+  'Mega Knight': { openingAggro: 0.08, beatdownThreshold: 7.0, beatdownWeight: 0.2 },
+  'Royal Giant': { openingAggro: 0.35, beatdownThreshold: 7.2, beatdownWeight: 0.14 },
+  'Giant': { openingAggro: 0.25, beatdownThreshold: 7.0, beatdownWeight: 0.16 },
+
+  // Utility / setup
+  'Elixir Collector': { openingAggro: 0.4, beatdownThreshold: 6.5, beatdownWeight: 0.14, overflowGreed: 0.35 },
+  'Tombstone': { openingAggro: 0.35, cycleBias: 0.18 },
+  'Cannon': { openingAggro: 0.32, cycleBias: 0.2 },
+  'Tesla': { openingAggro: 0.28, cycleBias: 0.15 },
+  'Inferno Tower': { openingAggro: 0.22, beatdownThreshold: 6.2, beatdownWeight: 0.12 },
+};
+
+const getTempoProfile = (cardName: string): TempoProfile => ({
+  ...DEFAULT_TEMPO_PROFILE,
+  ...(CARD_TEMPO_PROFILES[cardName] ?? {}),
+});
+
+const elixirForCard = (cardName: string): number => CARD_COST_LOOKUP.get(cardName) ?? 4;
+
+export const calculateCardLikelihoods = (seenCards: string[], currentElixir = 5): CardLikelihoods => {
   const predictions = predictDecks(seenCards);
   const uniqueSeen = new Set(seenCards);
   const lastSeenIndex = new Map<string, number>();
+
+  const elixirSpentEstimate = seenCards.reduce((total, card) => total + elixirForCard(card), 0);
+  const tempoPhase = Math.min(1, elixirSpentEstimate / 50); // Rough proxy for game progression
+  const elixirPressure = Math.max(0, currentElixir - 9); // About to leak elixir
 
   seenCards.forEach((card, idx) => {
     lastSeenIndex.set(card, idx);
@@ -90,6 +163,8 @@ export const calculateCardLikelihoods = (seenCards: string[]): CardLikelihoods =
       const usageStats = CARD_USAGE_STATS[cardName];
       const popularity = usageStats?.usageRate ?? 0.18;
       const expectedCycle = usageStats?.avgCycleLength ?? 4.0;
+      const tempoProfile = getTempoProfile(cardName);
+      const elixirCost = elixirForCard(cardName);
 
       // Respect the Clash Royale draw rule: a card cannot be redrawn until four
       // other cards have been played. While unseen cards are exempt, recently used
@@ -114,6 +189,29 @@ export const calculateCardLikelihoods = (seenCards: string[]): CardLikelihoods =
       // Popular, frequently cycled cards should start with a stronger prior.
       const popularityPrior = 0.65 + popularity * 0.8;
 
+      // Aggression/tempo modeling: early-cycle win conditions like Hog Rider surge
+      // before midgame, while beatdown units wait for high elixir banks.
+      const openerBonus = 1 + tempoProfile.openingAggro * Math.max(0, 1 - tempoPhase);
+      const beatdownBonus =
+        tempoProfile.beatdownThreshold !== undefined
+          ? 1 + Math.max(0, currentElixir - tempoProfile.beatdownThreshold) * (tempoProfile.beatdownWeight ?? 0.1)
+          : 1;
+
+      // Encourage plays as the opponent approaches max elixir to avoid leak (e.g., Pump, spawners).
+      const overflowBonus = 1 + elixirPressure * 0.15 * (1 + (tempoProfile.overflowGreed ?? 0));
+
+      // Elixir affordability: cards that cannot be paid for should have sharply reduced odds.
+      const affordability = currentElixir >= elixirCost ? 1 : Math.max(0.2, (currentElixir / Math.max(elixirCost, 1)) * 0.4);
+      const elixirMomentum = 1 + Math.max(0, currentElixir - elixirCost) * 0.08;
+
+      // Cycling nuance: if a card typically spins quickly and is ready, it should reappear sooner.
+      const cycleBias = tempoProfile.cycleBias ?? 0;
+      const cycleUrgency = 1 + cycleBias * Math.max(0, 1 - playsSinceSeen / Math.max(expectedCycle * 1.5, 1));
+      const firstStrikeBonus = lastSeen === -1 ? 1 + (tempoProfile.firstStrikeBonus ?? 0) : 1;
+
+      // Cards that get delayed (e.g., defensive buildings) decelerate if the opponent is still in early elixir curves.
+      const defensiveDrag = elixirCost >= 5 && tempoPhase < 0.35 ? 0.9 : 1;
+
       const cardScore =
         deckWeight *
         cooldownPenalty *
@@ -121,7 +219,15 @@ export const calculateCardLikelihoods = (seenCards: string[]): CardLikelihoods =
         unseenBonus *
         missingBonus *
         fatiguePenalty *
-        popularityPrior;
+        popularityPrior *
+        openerBonus *
+        beatdownBonus *
+        overflowBonus *
+        affordability *
+        elixirMomentum *
+        cycleUrgency *
+        firstStrikeBonus *
+        defensiveDrag;
 
       likelihoodAccumulator[cardName] = (likelihoodAccumulator[cardName] || 0) + cardScore;
     });

@@ -4,8 +4,11 @@ import { useGameStore } from '../store/gameStore';
 import { calculateCardLikelihoods } from '../utils/deckLogic';
 
 export const CardGrid: React.FC = () => {
-  const { seenCards, addSeenCard, isOverlayMode, definitiveDeck } = useGameStore();
+  const { seenCards, addSeenCard, isOverlayMode, definitiveDeck, currentElixir } = useGameStore();
   const [filter, setFilter] = useState('');
+
+  // Only refresh likelihood ordering whenever a full elixir is gained to mirror game pacing
+  const elixirPulse = Math.floor(currentElixir);
 
   const isDeckLocked = Boolean(definitiveDeck && definitiveDeck.length === 8);
 
@@ -30,7 +33,7 @@ export const CardGrid: React.FC = () => {
       };
     }
 
-    const { scores, normalized } = calculateCardLikelihoods(seenCards);
+    const { scores, normalized } = calculateCardLikelihoods(seenCards, currentElixir);
 
     const sorted = [...CARDS].sort((a, b) => {
       const weightA = scores[a.name] || 0;
@@ -51,7 +54,7 @@ export const CardGrid: React.FC = () => {
     });
 
     return { sortedCards: sorted, likelihoodRatings: normalized };
-  }, [definitiveDeck, isDeckLocked, seenCards]);
+  }, [currentElixir, definitiveDeck, elixirPulse, isDeckLocked, seenCards]);
 
   const filteredCards = useMemo(() => {
     if (isDeckLocked) return sortedCards;
