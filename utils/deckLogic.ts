@@ -21,6 +21,12 @@ export interface CardLikelihoods {
   maxScore: number;
 }
 
+export interface HandEstimate {
+  hand: string[];
+  nextCard: string | null;
+  drawPile: string[];
+}
+
 export const predictDecks = (seenCards: string[]): DeckPrediction[] => {
   // Use a Set for unique seen cards to avoid double counting if opponent cycles
   const uniqueSeen = new Set(seenCards);
@@ -244,5 +250,68 @@ export const calculateCardLikelihoods = (seenCards: string[], currentElixir = 5)
     scores: likelihoodAccumulator,
     normalized,
     maxScore,
+  };
+};
+
+/**
+ * Reconstruct the opponent's current hand by simulating Clash Royale's draw rules
+ * against a known deck list and the chronological plays we've observed.
+ */
+export const estimateOpponentHand = (
+  deckOrder: string[],
+  plays: string[]
+): HandEstimate => {
+  if (deckOrder.length < 4) {
+    return { hand: [], nextCard: null, drawPile: [...deckOrder] };
+  }
+
+  // Start with a deterministic deck order so the simulation is repeatable and
+  // transparent to the user (first seen unique cards become the deck order).
+  const drawPile = deckOrder.slice(4);
+  const hand = deckOrder.slice(0, 4);
+
+  const drawIntoHand = () => {
+    if (drawPile.length === 0 || hand.length >= 4) return;
+    const next = drawPile.shift();
+    if (next) {
+      hand.push(next);
+    }
+  };
+
+  plays.forEach((playedCard) => {
+    // If our assumed hand is missing the card, fast-forward draws until it appears
+    // or we exhaust the pile. This keeps the simulation resilient to imperfect deck ordering.
+    if (!hand.includes(playedCard)) {
+      while (!hand.includes(playedCard) && drawPile.length > 0) {
+        const drawn = drawPile.shift()!;
+        hand.push(drawn);
+
+        // Maintain the 4-card hand limit by cycling the oldest guess to the bottom.
+        if (hand.length > 4) {
+          const cycledOut = hand.shift();
+          if (cycledOut) {
+            drawPile.push(cycledOut);
+          }
+        }
+      }
+    }
+
+    // Remove the played card from hand if present.
+    const inHandIdx = hand.indexOf(playedCard);
+    if (inHandIdx !== -1) {
+      hand.splice(inHandIdx, 1);
+    }
+
+    // The played card moves to the back of the draw pile, then we draw one.
+    drawPile.push(playedCard);
+    drawIntoHand();
+  });
+
+  drawIntoHand();
+
+  return {
+    hand,
+    nextCard: drawPile[0] ?? null,
+    drawPile,
   };
 };
