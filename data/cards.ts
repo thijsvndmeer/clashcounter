@@ -6,8 +6,8 @@ export interface Card {
   icon: string;
 }
 
-const cardIcon = (slug: string) =>
-  `https://cdn.jsdelivr.net/gh/RoyaleAPI/cr-api-assets@master/cards-256/${slug}.png`;
+const CARD_ICON_BASE_URL = 'https://cdn.jsdelivr.net/gh/RoyaleAPI/cr-api-assets@<REPLACE_WITH_A_SPECIFIC_COMMIT_HASH>/cards-256';
+const cardIcon = (slug: string) => `${CARD_ICON_BASE_URL}/${slug}.png`;
 
 export const CARDS: Card[] = [
   // Win Conditions
