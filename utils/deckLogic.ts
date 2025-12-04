@@ -200,9 +200,15 @@ export const calculateCardLikelihoods = (seenCards: string[], currentElixir = 5)
       // Encourage plays as the opponent approaches max elixir to avoid leak (e.g., Pump, spawners).
       const overflowBonus = 1 + elixirPressure * 0.15 * (1 + (tempoProfile.overflowGreed ?? 0));
 
-      // Elixir affordability: cards that cannot be paid for should have sharply reduced odds.
-      const affordability = currentElixir >= elixirCost ? 1 : Math.max(0.2, (currentElixir / Math.max(elixirCost, 1)) * 0.4);
+      // Elixir affordability: cards far out of reach should effectively vanish, while cheap cycle
+      // options get rewarded when the opponent is starved on elixir.
+      const elixirGap = elixirCost - currentElixir;
+      const affordability =
+        elixirGap <= 0
+          ? 1 + Math.min(0.45, (currentElixir - elixirCost) * 0.08 + (1 - elixirCost / 10) * 0.12)
+          : Math.max(0.05, Math.exp(-elixirGap * 1.15));
       const elixirMomentum = 1 + Math.max(0, currentElixir - elixirCost) * 0.08;
+      const lowElixirCycleBoost = currentElixir < 3 && elixirCost <= currentElixir ? 1.12 : 1;
 
       // Cycling nuance: if a card typically spins quickly and is ready, it should reappear sooner.
       const cycleBias = tempoProfile.cycleBias ?? 0;
@@ -225,6 +231,7 @@ export const calculateCardLikelihoods = (seenCards: string[], currentElixir = 5)
         overflowBonus *
         affordability *
         elixirMomentum *
+        lowElixirCycleBoost *
         cycleUrgency *
         firstStrikeBonus *
         defensiveDrag;

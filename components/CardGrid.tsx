@@ -56,13 +56,18 @@ export const CardGrid: React.FC = () => {
     return { sortedCards: sorted, likelihoodRatings: normalized };
   }, [currentElixir, definitiveDeck, elixirPulse, isDeckLocked, seenCards]);
 
-  const filteredCards = useMemo(() => {
-    if (isDeckLocked) return sortedCards;
+  const playableCards = useMemo(
+    () => sortedCards.filter((card) => card.elixir <= currentElixir + 0.001),
+    [currentElixir, sortedCards]
+  );
 
-    return sortedCards.filter(c =>
-      c.name.toLowerCase().includes(filter.toLowerCase())
+  const filteredCards = useMemo(() => {
+    if (isDeckLocked) return playableCards;
+
+    return playableCards.filter((card) =>
+      card.name.toLowerCase().includes(filter.toLowerCase())
     );
-  }, [filter, isDeckLocked, sortedCards]);
+  }, [filter, isDeckLocked, playableCards]);
 
   const handleCardClick = (card: Card) => {
     if (isDeckLocked && definitiveDeck && !definitiveDeck.includes(card.name)) return;
