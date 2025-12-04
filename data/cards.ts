@@ -6,38 +6,8 @@ export interface Card {
   icon: string;
 }
 
-// Local, gradient-backed icons so the UI never depends on remote assets.
-const cardIcon = (slug: string) => buildLocalIcon(slug);
-
-const buildLocalIcon = (slug: string) => {
-  const label = slug
-    .split('-')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-
-  const hash = Array.from(slug).reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const hue = hash % 360;
-  const startHue = hue;
-  const endHue = (hue + 35) % 360;
-
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="${label}">
-      <defs>
-        <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="hsl(${startHue}, 75%, 55%)" />
-          <stop offset="100%" stop-color="hsl(${endHue}, 75%, 40%)" />
-        </linearGradient>
-      </defs>
-      <rect width="160" height="160" rx="18" fill="url(#g)" />
-      <rect x="8" y="8" width="144" height="144" rx="14" fill="rgba(0,0,0,0.18)" stroke="rgba(255,255,255,0.18)" />
-      <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="#fff" font-family="'Inter', system-ui" font-size="20" font-weight="700" letter-spacing="0.5">
-        ${label.replace(/&/g, '&amp;')}
-      </text>
-    </svg>
-  `;
-
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg.trim())}`;
-};
+const CARD_ICON_BASE_URL = 'https://cdn.jsdelivr.net/gh/RoyaleAPI/cr-api-assets@<REPLACE_WITH_A_SPECIFIC_COMMIT_HASH>/cards-256';
+const cardIcon = (slug: string) => `${CARD_ICON_BASE_URL}/${slug}.png`;
 
 export const CARDS: Card[] = [
   // Win Conditions
