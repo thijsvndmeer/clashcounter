@@ -93,6 +93,12 @@ export const CardGrid: React.FC = () => {
                   <span className={`font-bold text-[10px] ${isSeen ? 'text-fuchsia-300' : 'text-fuchsia-400'}`}>
                     {card.elixir}
                   </span>
+                  <img
+                    src={card.icon}
+                    alt={card.name}
+                    loading="lazy"
+                    className="w-10 h-10 object-cover rounded shadow-inner"
+                  />
                   <span className="text-[8px] text-center leading-tight px-0.5 text-gray-200 mt-0.5 line-clamp-2">
                     {card.name}
                   </span>
@@ -115,7 +121,7 @@ export const CardGrid: React.FC = () => {
                         <button
                             key={card.id}
                             onClick={() => handleCardClick(card)}
-                            className={`
+                        className={`
                                 flex-shrink-0 flex flex-col items-center justify-center rounded border transition-all active:scale-95 snap-start
                                 w-12 h-14
                                 ${isSeen
@@ -126,6 +132,12 @@ export const CardGrid: React.FC = () => {
                              <span className={`font-bold text-[10px] ${isSeen ? 'text-fuchsia-300' : 'text-fuchsia-400'}`}>
                                 {card.elixir}
                             </span>
+                            <img
+                              src={card.icon}
+                              alt={card.name}
+                              loading="lazy"
+                              className="w-10 h-10 object-cover rounded shadow-inner"
+                            />
                             <span className="text-[7px] text-center leading-none px-0.5 text-gray-200 mt-0.5 line-clamp-2">
                                 {card.name}
                             </span>
@@ -192,6 +204,16 @@ export const CardGrid: React.FC = () => {
                                 <span className={`font-bold drop-shadow-md text-[10px] ${isSeen ? 'text-fuchsia-200' : 'text-fuchsia-300'}`}>
                                     {card.elixir}
                                 </span>
+                            </div>
+
+                            {/* Card Icon */}
+                            <div className="flex-1 flex items-center justify-center">
+                              <img
+                                src={card.icon}
+                                alt={card.name}
+                                loading="lazy"
+                                className={`h-16 w-16 object-contain drop-shadow ${isSeen ? 'opacity-90' : 'opacity-100'}`}
+                              />
                             </div>
 
                             {/* Card Name */}
