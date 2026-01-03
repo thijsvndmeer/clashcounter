@@ -6,6 +6,7 @@ interface GameState {
   isPlaying: boolean;
   isOverlayMode: boolean;
   definitiveDeck: string[] | null;
+  gameTime: number; // Elapsed time in seconds
   
   // Actions
   addSeenCard: (cardName: string, elixirCost: number) => void;
@@ -16,8 +17,8 @@ interface GameState {
   toggleOverlayMode: () => void;
 }
 
-// 0.266 elixir per second as requested
-const ELIXIR_REGEN_RATE = 0.266;
+// Base rate: 0.266 elixir per second (as originally requested/configured)
+const BASE_ELIXIR_RATE = 0.266;
 const MAX_ELIXIR = 10;
 const START_ELIXIR = 5;
 
@@ -27,20 +28,16 @@ export const useGameStore = create<GameState>((set) => ({
   isPlaying: false,
   isOverlayMode: false,
   definitiveDeck: null,
+  gameTime: 0,
 
   addSeenCard: (cardName, elixirCost) => set((state) => {
-    // Once the definitive deck is known, ignore clicks outside of it
     if (state.definitiveDeck && !state.definitiveDeck.includes(cardName)) {
       return {};
     }
 
-    // Prevent duplicate entries if you only want unique seen cards,
-    // but in CR you cycle cards. The prompt implies "seen cards" for prediction.
-    // We will maintain a list of all cards played in order, but for prediction we just look at unique ones.
     const newSeen = [...state.seenCards, cardName];
-
-    // Determine definitive deck when 8 unique cards have been clicked
     let definitiveDeck = state.definitiveDeck;
+    
     if (!definitiveDeck) {
       const uniqueInOrder: string[] = [];
       for (const card of newSeen) {
@@ -54,14 +51,13 @@ export const useGameStore = create<GameState>((set) => ({
       }
     }
 
-    // Deduct elixir logic
     let newElixir = state.currentElixir - elixirCost;
-    if (newElixir < 0) newElixir = 0; // Can't have negative elixir really, but opponent might have leaked
+    if (newElixir < 0) newElixir = 0;
 
     return {
       seenCards: newSeen,
       currentElixir: newElixir,
-      isPlaying: true, // Start game if not started
+      isPlaying: true,
       definitiveDeck,
     };
   }),
@@ -69,10 +65,27 @@ export const useGameStore = create<GameState>((set) => ({
   tick: (deltaSeconds) => set((state) => {
     if (!state.isPlaying) return {};
     
-    let nextElixir = state.currentElixir + (deltaSeconds * ELIXIR_REGEN_RATE);
+    const nextTime = state.gameTime + deltaSeconds;
+    
+    // Determine Multiplier
+    // 0-120s (First 2 mins): 1x
+    // 120s-240s (Last min regular + First min OT): 2x
+    // 240s+ (Last min OT): 3x
+    let multiplier = 1;
+    if (nextTime >= 240) {
+        multiplier = 3;
+    } else if (nextTime >= 120) {
+        multiplier = 2;
+    }
+
+    const regen = deltaSeconds * BASE_ELIXIR_RATE * multiplier;
+    let nextElixir = state.currentElixir + regen;
     if (nextElixir > MAX_ELIXIR) nextElixir = MAX_ELIXIR;
 
-    return { currentElixir: nextElixir };
+    return { 
+        currentElixir: nextElixir,
+        gameTime: nextTime
+    };
   }),
 
   resetGame: () => set({
@@ -80,6 +93,7 @@ export const useGameStore = create<GameState>((set) => ({
     seenCards: [],
     isPlaying: false,
     definitiveDeck: null,
+    gameTime: 0,
   }),
 
   setElixir: (value) => set({

@@ -13,11 +13,11 @@ export const ElixirBar: React.FC = () => {
 
   if (isOverlayMode) {
     return (
-      <div className="w-full relative h-6 flex items-center bg-black/40 backdrop-blur-sm">
+      <div className="w-full relative h-full flex items-center overflow-hidden">
         {/* Background Bar */}
-        <div className="absolute inset-0 w-full h-full">
+        <div className="absolute inset-0 w-full h-full bg-black/20">
             <div 
-                className={`h-full ${barColor} transition-all duration-100 ease-linear opacity-90`}
+                className={`h-full ${barColor} transition-all duration-100 ease-linear opacity-70`}
                 style={{ width: `${widthPercentage}%` }}
             />
         </div>

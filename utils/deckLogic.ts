@@ -136,6 +136,26 @@ const getTempoProfile = (cardName: string): TempoProfile => ({
 
 const elixirForCard = (cardName: string): number => CARD_COST_LOOKUP.get(cardName) ?? 4;
 
+export const getLastCardElixirCost = (seenCards: string[]): number => {
+  if (seenCards.length === 0) return 1; // Default if nothing played
+  const lastCardName = seenCards[seenCards.length - 1];
+  // If the last card was Mirror itself, we look at the one before that? 
+  // Technically Mirror mirrors the last played card. If you play Mirror then Mirror again?
+  // You can't hold two Mirrors. But in our tracker, we just track plays.
+  // If opponent plays Hog (4) -> Mirror (5). Last card in seenCards is "Mirror".
+  // If we want to know what the *next* Mirror cost is, we need to know what the last *real* card was?
+  // Actually, 'seenCards' records the name of the card played. 
+  // If opponent plays Mirror, we should probably record it as "Mirror" or "Hog Rider"?
+  // If we record "Mirror", we lose the context of what it was.
+  // BUT the prompt asks for "last card played + 1".
+  // If the tracker records "Mirror" as the name, then looking up "Mirror" cost is 1.
+  // This logic implies we need to be careful about what we push to seenCards.
+  // Assuming seenCards contains the names of cards as they appear in the log.
+  // Let's stick to the prompt: "elixir cost of the last card played +1".
+  const cost = CARD_COST_LOOKUP.get(lastCardName) ?? 1;
+  return cost + 1;
+};
+
 export const calculateCardLikelihoods = (seenCards: string[], currentElixir = 5): CardLikelihoods => {
   const predictions = predictDecks(seenCards);
   const uniqueSeen = new Set(seenCards);
@@ -286,6 +306,17 @@ export const estimateOpponentHand = (
   };
 
   plays.forEach((playedCard) => {
+    // Safety check: if the played card is not in our deck list (e.g. prediction was wrong),
+    // we cannot simulate it correctly. Skip it or just continue.
+    // In a real scenario, we might want to "swap" a card in the deck, but that's complex.
+    const isInDeck = hand.includes(playedCard) || drawPile.includes(playedCard);
+    
+    if (!isInDeck) {
+      // If we can't find it, we just ignore this play for hand state
+      // This prevents the "search in drawPile" loop from draining the pile for nothing.
+      return; 
+    }
+
     // If our assumed hand is missing the card, fast-forward draws until it appears
     // or we exhaust the pile. This keeps the simulation resilient to imperfect deck ordering.
     if (!hand.includes(playedCard)) {
@@ -315,6 +346,20 @@ export const estimateOpponentHand = (
   });
 
   drawIntoHand();
+
+  // Final Sanity Check: The last played card CANNOT be in the hand immediately after playing it
+  // (unless deck size < 5, which isn't the case here).
+  // This safeguards against any simulation desync where a card like Mirror might appear to "stick".
+  if (plays.length > 0) {
+      const lastPlayed = plays[plays.length - 1];
+      const stickyIndex = hand.indexOf(lastPlayed);
+      if (stickyIndex !== -1) {
+          // Remove the sticky card
+          hand.splice(stickyIndex, 1);
+          // Attempt to draw a replacement to maintain hand size
+          drawIntoHand();
+      }
+  }
 
   return {
     hand,

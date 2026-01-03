@@ -5,19 +5,29 @@ import { CardGrid } from './components/CardGrid';
 import { useGameStore } from './store/gameStore';
 
 const App: React.FC = () => {
-  const { tick, isPlaying, resetGame, togglePlay, isOverlayMode, toggleOverlayMode } = useGameStore();
+  const { tick, isPlaying, resetGame, togglePlay, isOverlayMode, toggleOverlayMode, definitiveDeck, gameTime } = useGameStore();
+
+  const isDeckLocked = Boolean(definitiveDeck && definitiveDeck.length === 8);
 
   // The Game Loop
   useEffect(() => {
-    const intervalMs = 100;
-    const intervalSec = intervalMs / 1000;
-
+    let lastTime = Date.now();
     const intervalId = setInterval(() => {
-      tick(intervalSec);
-    }, intervalMs);
+      const now = Date.now();
+      const deltaMs = now - lastTime;
+      const deltaSec = deltaMs / 1000;
+      
+      // Update lastTime for next tick
+      lastTime = now;
+
+      // Only tick if playing to avoid accumulators when paused (though store checks isPlaying too)
+      if (isPlaying) {
+        tick(deltaSec);
+      }
+    }, 100);
 
     return () => clearInterval(intervalId);
-  }, [tick]);
+  }, [tick, isPlaying]);
 
   // Draggable Logic for Overlay Mode
   const [position, setPosition] = useState({ x: 20, y: 50 });
@@ -25,15 +35,21 @@ const App: React.FC = () => {
   const dragStart = useRef({ x: 0, y: 0 });
 
   const handlePointerDown = (e: React.PointerEvent) => {
-    // Only allow dragging from header/empty areas to avoid conflict with buttons
-    // But for simplicity, we allow dragging the header area
+    // Only allow dragging from the header/elixir bar area
     const target = e.target as HTMLElement;
-    if (target.tagName === 'BUTTON') return;
+    
+    // Check if we are clicking a button (Close, Start)
+    if (target.closest('button')) return;
+
+    // Check if the click is within the header row (the first child of the draggable container)
+    // We can check if the target is inside the div with the elixir bar
+    const header = e.currentTarget.querySelector('.drag-handle');
+    if (header && !header.contains(target)) return;
 
     setIsDragging(true);
     // e.clientX is global, position.x is current offset
     dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y };
-    target.setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -49,6 +65,33 @@ const App: React.FC = () => {
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   };
 
+  const formatGameTime = (seconds: number) => {
+    // Total duration cap logic
+    // 0-3 mins (180s): Regular Time
+    // 3-5 mins (300s): Overtime
+    const isOvertime = seconds >= 180;
+    
+    // Remaining seconds calculation
+    let remaining = 0;
+    if (!isOvertime) {
+        remaining = 180 - seconds;
+    } else {
+        remaining = 300 - seconds;
+    }
+    
+    // Clamp to 0
+    if (remaining < 0) remaining = 0;
+
+    const m = Math.floor(remaining / 60);
+    const s = Math.floor(remaining % 60);
+    return {
+        text: `${m}:${s.toString().padStart(2, '0')}`,
+        isOvertime,
+        multiplier: seconds >= 240 ? 3 : seconds >= 120 ? 2 : 1
+    };
+  };
+
+  const timerDisplay = formatGameTime(gameTime);
 
   // --- OVERLAY MODE RENDER ---
   if (isOverlayMode) {
@@ -56,7 +99,12 @@ const App: React.FC = () => {
       // Full-screen transparent overlay so the widget floats above the game on Android
       <div className="fixed inset-0 z-50 bg-transparent pointer-events-none">
         <div
-            className="absolute flex flex-col w-64 rounded-xl border border-gray-600/50 bg-black/85 backdrop-blur-md shadow-2xl overflow-hidden touch-none pointer-events-auto"
+            className={`
+              absolute flex flex-col w-64 rounded-xl border bg-black/85 backdrop-blur-md shadow-2xl overflow-hidden touch-none pointer-events-auto transition-colors duration-500
+              ${isDeckLocked 
+                ? 'border-fuchsia-500 shadow-[0_0_15px_rgba(192,38,211,0.3)]' 
+                : 'border-gray-600/50'}
+            `}
             style={{
                 left: position.x,
                 top: position.y,
@@ -66,47 +114,53 @@ const App: React.FC = () => {
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
         >
-            {/* Row 1: Controls (Drag Handle) */}
-            <div className="flex justify-between items-center p-1.5 bg-gray-800/60 border-b border-gray-700/50 select-none">
-                <div className="flex gap-2">
-                    {/* Play/Pause */}
-                    <button
-                        onClick={togglePlay}
-                        className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold ${isPlaying ? 'bg-yellow-600/90 text-white' : 'bg-green-600/90 text-white'}`}
-                    >
-                        {isPlaying ? '||' : '▶'}
-                    </button>
-
-                    {/* Reset */}
-                    <button 
-                        onClick={resetGame}
-                        className="w-6 h-6 rounded bg-gray-600/90 text-gray-200 flex items-center justify-center text-[10px] font-bold"
-                    >
-                        ↺
-                    </button>
+            {/* Row 1: Integrated Elixir Bar & Controls */}
+            <div className="drag-handle relative h-8 bg-gray-800/60 border-b border-gray-700/50 select-none overflow-hidden">
+                {/* Integrated Elixir Bar */}
+                <div className="absolute inset-0">
+                  <ElixirBar />
                 </div>
                 
-                {/* Drag Indicator */}
-                <div className="flex gap-0.5 opacity-50">
-                    <div className="w-1 h-1 rounded-full bg-gray-400"></div>
-                    <div className="w-1 h-1 rounded-full bg-gray-400"></div>
-                    <div className="w-1 h-1 rounded-full bg-gray-400"></div>
+                {/* Header Controls (Overlaid) */}
+                <div className="relative z-10 h-full flex justify-between items-center px-2 pointer-events-none">
+                    {/* Left: Start Button OR Timer */}
+                    <div className="flex items-center gap-2 pointer-events-auto">
+                        {!isPlaying ? (
+                             <button
+                                onClick={togglePlay}
+                                className="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center hover:bg-green-400 shadow-md transition-all active:scale-95"
+                                aria-label="Start Game"
+                             >
+                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 ml-0.5">
+                                    <path d="M8 5v14l11-7z" />
+                                </svg>
+                             </button>
+                        ) : (
+                            <div className="flex items-center gap-1.5 bg-black/40 rounded px-1.5 py-0.5 backdrop-blur-sm">
+                                <span className={`text-[10px] font-mono font-bold ${timerDisplay.isOvertime ? 'text-red-400 animate-pulse' : 'text-white'}`}>
+                                    {timerDisplay.text}
+                                </span>
+                                {timerDisplay.multiplier > 1 && (
+                                    <span className="text-[9px] font-black text-amber-400 leading-none">
+                                        {timerDisplay.multiplier}x
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* Close Overlay */}
+                    <button
+                      onClick={toggleOverlayMode}
+                      className="w-6 h-6 rounded-full bg-black/40 text-gray-100 flex items-center justify-center text-[10px] font-bold pointer-events-auto hover:bg-black/60 transition-colors"
+                      aria-label="Close overlay"
+                    >
+                      ✕
+                    </button>
                 </div>
-
-                {/* Close Overlay */}
-                <button
-                  onClick={toggleOverlayMode}
-                  className="w-6 h-6 ml-2 rounded-full bg-gray-700/80 text-gray-200 flex items-center justify-center text-[10px] font-bold"
-                  aria-label="Close overlay"
-                >
-                  ✕
-                </button>
             </div>
 
-            {/* Row 2: Elixir Bar */}
-            <ElixirBar />
-
-            {/* Row 3: Cards (Horizontal) */}
+            {/* Row 2: Cards (Horizontal) */}
             <CardGrid />
             
             {/* DeckPredictor is hidden in this mode */}
@@ -121,9 +175,16 @@ const App: React.FC = () => {
       
       {/* Header / Controls */}
       <header className="flex justify-between items-center bg-gray-900 border-b border-gray-800 p-3">
-        <h1 className="text-fuchsia-500 font-black italic tracking-tighter text-lg">
-            CR <span className="text-white not-italic font-normal">TRACKER</span>
-        </h1>
+        <div className="flex flex-col">
+            <h1 className="text-fuchsia-500 font-black italic tracking-tighter text-lg leading-none">
+                CR <span className="text-white not-italic font-normal">TRACKER</span>
+            </h1>
+            {isPlaying && (
+                 <span className="text-[10px] text-gray-500 font-mono mt-0.5">
+                    {timerDisplay.text} {timerDisplay.isOvertime ? '(OT)' : ''} {timerDisplay.multiplier > 1 ? `• ${timerDisplay.multiplier}x` : ''}
+                 </span>
+            )}
+        </div>
        
         <div className="flex gap-2 justify-end">
             <div className="flex gap-1">
@@ -157,10 +218,9 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Section 1: Elixir & Deck Prediction (Sticky Top) */}
+      {/* Main Section 1: Elixir Bar (Sticky Top) */}
       <div className="flex-none flex flex-col">
         <ElixirBar />
-        <DeckPredictor />
       </div>
 
       {/* Main Section 2: Card Grid (Scrollable) */}
