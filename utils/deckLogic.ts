@@ -1,5 +1,6 @@
 import { Deck, META_DECKS } from '../data/decks';
 import { CARD_USAGE_STATS } from '../data/cardUsageStats';
+import { CARD_ELIXIR_STATS } from '../data/cardElixirStats';
 import { CARDS } from '../data/cards';
 
 export interface DeckPrediction {
@@ -136,22 +137,22 @@ const getTempoProfile = (cardName: string): TempoProfile => ({
 
 const elixirForCard = (cardName: string): number => CARD_COST_LOOKUP.get(cardName) ?? 4;
 
+// Simple Role Definitions for Synergy Logic
+const WIN_CONDITIONS = new Set([
+  'Hog Rider', 'Royal Giant', 'Golem', 'Lava Hound', 'Balloon', 'Goblin Barrel', 
+  'Miner', 'Graveyard', 'Electro Giant', 'Goblin Giant', 'Ram Rider', 'Elixir Golem',
+  'Battle Ram', 'Wall Breakers', 'Skeleton Barrel', 'Three Musketeers', 'X-Bow', 'Mortar'
+]);
+
+const SPELLS = new Set([
+  'The Log', 'Zap', 'Fireball', 'Poison', 'Rocket', 'Lightning', 'Tornado', 'Arrows',
+  'Earthquake', 'Freeze', 'Giant Snowball', 'Barbarian Barrel', 'Royal Delivery', 'Mirror', 
+  'Rage', 'Clone', 'Void', 'Goblin Curse'
+]);
+
 export const getLastCardElixirCost = (seenCards: string[]): number => {
   if (seenCards.length === 0) return 1; // Default if nothing played
   const lastCardName = seenCards[seenCards.length - 1];
-  // If the last card was Mirror itself, we look at the one before that? 
-  // Technically Mirror mirrors the last played card. If you play Mirror then Mirror again?
-  // You can't hold two Mirrors. But in our tracker, we just track plays.
-  // If opponent plays Hog (4) -> Mirror (5). Last card in seenCards is "Mirror".
-  // If we want to know what the *next* Mirror cost is, we need to know what the last *real* card was?
-  // Actually, 'seenCards' records the name of the card played. 
-  // If opponent plays Mirror, we should probably record it as "Mirror" or "Hog Rider"?
-  // If we record "Mirror", we lose the context of what it was.
-  // BUT the prompt asks for "last card played + 1".
-  // If the tracker records "Mirror" as the name, then looking up "Mirror" cost is 1.
-  // This logic implies we need to be careful about what we push to seenCards.
-  // Assuming seenCards contains the names of cards as they appear in the log.
-  // Let's stick to the prompt: "elixir cost of the last card played +1".
   const cost = CARD_COST_LOOKUP.get(lastCardName) ?? 1;
   return cost + 1;
 };
@@ -169,19 +170,35 @@ export const calculateCardLikelihoods = (seenCards: string[], currentElixir = 5)
     lastSeenIndex.set(card, idx);
   });
 
+  // Determine Last Played Card Context
+  const lastPlayedCard = seenCards.length > 0 ? seenCards[seenCards.length - 1] : null;
+  const lastCost = lastPlayedCard ? elixirForCard(lastPlayedCard) : 3;
+  const lastIsWinCon = lastPlayedCard ? WIN_CONDITIONS.has(lastPlayedCard) : false;
+  const lastIsSpell = lastPlayedCard ? SPELLS.has(lastPlayedCard) : false;
+  const lastIsTank = lastPlayedCard && !lastIsSpell && lastCost >= 6; // Rough Tank definition
+
   const likelihoodAccumulator: Record<string, number> = {};
   const totalPlays = seenCards.length;
 
-  predictions.forEach((prediction, predictionIndex) => {
+  // Focus on top 50 predictions for likelihood calculation to avoid noise
+  const relevantPredictions = predictions.slice(0, 50);
+
+  relevantPredictions.forEach((prediction, predictionIndex) => {
     const mismatches = Math.max(0, uniqueSeen.size - prediction.matchScore);
     const matchRatio = prediction.matchScore / prediction.deck.cards.length;
 
-    // Deck confidence rewards strong matches and penalizes mismatches,
-    // with a slight boost for the most likely deck in the list.
+    // Deck confidence rewards strong matches and penalizes mismatches.
+    // Boost for top prediction and popularity of the deck.
     const deckConfidence = Math.max(matchRatio - mismatches * 0.09, 0);
-    const topDeckBoost = predictionIndex === 0 ? 1.18 : 1;
+    // Increase boost for top decks and sharpen popularity decay
+    const topDeckBoost = predictionIndex === 0 ? 1.3 : predictionIndex < 5 ? 1.15 : 1.05;
+    
+    // Popularity Weight: Since META_DECKS is sorted by frequency (n), lower index = higher popularity.
+    // We add a decaying weight to prioritize cards from common meta decks over rare ones.
+    const popularityWeight = 1 + Math.max(0, (1000 - predictionIndex) / 500) * (predictionIndex < 50 ? 1.5 : 1);
+
     const mismatchDrag = 1 - Math.min(0.35, mismatches * 0.07);
-    const deckWeight = Math.pow(deckConfidence + 0.1, 2) * topDeckBoost * mismatchDrag;
+    const deckWeight = Math.pow(deckConfidence + 0.1, 2) * topDeckBoost * mismatchDrag * popularityWeight;
 
     prediction.deck.cards.forEach((cardName) => {
       const lastSeen = lastSeenIndex.has(cardName) ? lastSeenIndex.get(cardName)! : -1;
@@ -244,6 +261,52 @@ export const calculateCardLikelihoods = (seenCards: string[], currentElixir = 5)
       // Cards that get delayed (e.g., defensive buildings) decelerate if the opponent is still in early elixir curves.
       const defensiveDrag = elixirCost >= 5 && tempoPhase < 0.35 ? 0.9 : 1;
 
+      // --- SYNERGY & COMBO MOMENTUM ---
+      let synergyMomentum = 1;
+      
+      // Elixir Curve Synergy
+      if (lastCost >= 6) {
+          // Last was heavy: Expect Support/Spell (<= 4 elixir)
+          if (elixirCost <= 4) synergyMomentum *= 1.15;
+          // Unlikely to play another heavy card immediately
+          if (elixirCost >= 6) synergyMomentum *= 0.85; 
+      } else if (lastCost <= 2) {
+          // Last was cheap cycle: Expect Cycle (to rotate) or Big Card (cycle complete)
+          if (elixirCost <= 2) synergyMomentum *= 1.1; 
+          if (elixirCost >= 5) synergyMomentum *= 1.1;
+      }
+
+      // Role Synergy
+      const isSpell = SPELLS.has(cardName);
+      const isWinCon = WIN_CONDITIONS.has(cardName);
+      
+      // Win Condition -> Predictive Spell (e.g., Hog + Log)
+      if (lastIsWinCon && isSpell) synergyMomentum *= 1.25;
+      
+      // Tank -> Support (e.g., Golem + Night Witch)
+      // Support is defined here as non-spell, non-wincon (mostly)
+      if (lastIsTank && !isSpell && !isWinCon && elixirCost <= 5) synergyMomentum *= 1.2;
+
+      // --- DATA-DRIVEN STATE SYNERGY ---
+      let stateSynergy = 1;
+      const elixirStats = CARD_ELIXIR_STATS[cardName];
+      if (elixirStats) {
+          const avgDeckCost = elixirStats.avgDeckCost;
+          
+          // High Elixir Context: Opponent is banking elixir (>= 7.5)
+          if (currentElixir >= 7.5) {
+              // Boost cards typically found in heavy decks
+              if (avgDeckCost >= 3.8) stateSynergy *= 1.15;
+              // Boost expensive win conditions/tanks specifically
+              if (elixirCost >= 6) stateSynergy *= 1.25;
+          } 
+          // Low Elixir Context: Opponent is low (<= 4)
+          else if (currentElixir <= 4) {
+              // Boost cards typically found in cycle decks
+              if (avgDeckCost <= 3.2) stateSynergy *= 1.12;
+          }
+      }
+
       const cardScore =
         deckWeight *
         cooldownPenalty *
@@ -260,7 +323,9 @@ export const calculateCardLikelihoods = (seenCards: string[], currentElixir = 5)
         lowElixirCycleBoost *
         cycleUrgency *
         firstStrikeBonus *
-        defensiveDrag;
+        defensiveDrag *
+        synergyMomentum *
+        stateSynergy;
 
       likelihoodAccumulator[cardName] = (likelihoodAccumulator[cardName] || 0) + cardScore;
     });
