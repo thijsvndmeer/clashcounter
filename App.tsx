@@ -164,7 +164,7 @@ const App: React.FC = () => {
   if (isOverlayMode) {
     return (
       <div
-        className="w-full h-auto min-h-0 bg-transparent overflow-hidden"
+        className="w-full h-auto min-h-0 bg-red-500/50 overflow-hidden"
         style={{ touchAction: 'none' }} // Critical for custom gestures
         onPointerDown={handleGestureStart}
         onPointerMove={handleGestureMove}

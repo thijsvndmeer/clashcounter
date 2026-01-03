@@ -51,7 +51,7 @@ public class OverlayService extends Service {
 
         params = new WindowManager.LayoutParams(
                 (int) (screenWidth * 0.9),
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                (int) (400 * metrics.density), // FIXED HEIGHT for debugging
                 layoutFlag,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT);
@@ -138,6 +138,11 @@ public class OverlayService extends Service {
         Log.d(TAG, "OverlayService view added to window manager");
     }
 
+import android.webkit.ConsoleMessage;
+import android.webkit.WebChromeClient;
+
+// ... inside OverlayService ...
+
     private void setupWebView() {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -147,14 +152,30 @@ public class OverlayService extends Service {
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setAllowUniversalAccessFromFileURLs(true);
 
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
+                Log.d("OverlayWebView", consoleMessage.message() + " -- From line "
+                        + consoleMessage.lineNumber() + " of "
+                        + consoleMessage.sourceId());
+                return true;
+            }
+        });
+
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                Log.d(TAG, "Page loaded: " + url);
                 // Inject hash change after page load to ensure Router picks it up
                 view.evaluateJavascript(
                         "window.location.hash = '#overlay'; window.dispatchEvent(new HashChangeEvent('hashchange'));",
                         null);
+            }
+            
+            @Override
+            public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                Log.e(TAG, "WebView Error: " + description + " URL: " + failingUrl);
             }
         });
 
