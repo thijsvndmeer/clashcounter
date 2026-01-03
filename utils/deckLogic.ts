@@ -1,7 +1,11 @@
 import { Deck, META_DECKS } from '../data/decks';
 import { CARD_USAGE_STATS } from '../data/cardUsageStats';
 import { CARD_ELIXIR_STATS } from '../data/cardElixirStats';
+import { MODEL_WEIGHTS } from '../data/modelWeights';
 import { CARDS } from '../data/cards';
+
+// Map card names to indices for ML model
+const ML_CARD_TO_IDX = new Map(MODEL_WEIGHTS.cardNames.map((name, i) => [name, i]));
 
 export interface DeckPrediction {
   deck: Deck;
@@ -158,93 +162,79 @@ export const getLastCardElixirCost = (seenCards: string[]): number => {
 };
 
 export const calculateCardLikelihoods = (seenCards: string[], currentElixir = 5): CardLikelihoods => {
-  const predictions = predictDecks(seenCards);
+  // --- ADVANCED ML MODEL INFERENCE (Ridge Regression) ---
+  // Calculate raw ML scores for all cards based on seen patterns
+  const mlRawScores: Record<string, number> = {};
+  const seenIndices = seenCards
+    .map(name => ML_CARD_TO_IDX.get(name))
+    .filter((idx): idx is number => idx !== undefined);
+
+  // Normalize ML scores to a probability-like range (0 to ~1+)
+  MODEL_WEIGHTS.cardNames.forEach((name, j) => {
+      let score = MODEL_WEIGHTS.intercepts[j];
+      seenIndices.forEach(i => {
+          score += MODEL_WEIGHTS.weights[j][i];
+      });
+      // Ridge Regression outputs can be negative; clamp to small positive
+      // We use a power curve to separate high-probability cards from the noise
+      mlRawScores[name] = Math.max(0.001, score);
+  });
+
   const uniqueSeen = new Set(seenCards);
   const lastSeenIndex = new Map<string, number>();
-
+  
   const elixirSpentEstimate = seenCards.reduce((total, card) => total + elixirForCard(card), 0);
-  const tempoPhase = Math.min(1, elixirSpentEstimate / 50); // Rough proxy for game progression
-  const elixirPressure = Math.max(0, currentElixir - 9); // About to leak elixir
+  const tempoPhase = Math.min(1, elixirSpentEstimate / 50); 
+  const elixirPressure = Math.max(0, currentElixir - 9);
 
   seenCards.forEach((card, idx) => {
     lastSeenIndex.set(card, idx);
   });
 
-  // Determine Last Played Card Context
+  // Context for Synergy
   const lastPlayedCard = seenCards.length > 0 ? seenCards[seenCards.length - 1] : null;
   const lastCost = lastPlayedCard ? elixirForCard(lastPlayedCard) : 3;
   const lastIsWinCon = lastPlayedCard ? WIN_CONDITIONS.has(lastPlayedCard) : false;
   const lastIsSpell = lastPlayedCard ? SPELLS.has(lastPlayedCard) : false;
-  const lastIsTank = lastPlayedCard && !lastIsSpell && lastCost >= 6; // Rough Tank definition
+  const lastIsTank = lastPlayedCard && !lastIsSpell && lastCost >= 6;
 
   const likelihoodAccumulator: Record<string, number> = {};
   const totalPlays = seenCards.length;
 
-  // Focus on top 50 predictions for likelihood calculation to avoid noise
-  const relevantPredictions = predictions.slice(0, 50);
-
-  relevantPredictions.forEach((prediction, predictionIndex) => {
-    const mismatches = Math.max(0, uniqueSeen.size - prediction.matchScore);
-    const matchRatio = prediction.matchScore / prediction.deck.cards.length;
-
-    // Deck confidence rewards strong matches and penalizes mismatches.
-    // Boost for top prediction and popularity of the deck.
-    const deckConfidence = Math.max(matchRatio - mismatches * 0.09, 0);
-    // Increase boost for top decks and sharpen popularity decay
-    const topDeckBoost = predictionIndex === 0 ? 1.3 : predictionIndex < 5 ? 1.15 : 1.05;
-    
-    // Popularity Weight: Since META_DECKS is sorted by frequency (n), lower index = higher popularity.
-    // We add a decaying weight to prioritize cards from common meta decks over rare ones.
-    const popularityWeight = 1 + Math.max(0, (1000 - predictionIndex) / 500) * (predictionIndex < 50 ? 1.5 : 1);
-
-    const mismatchDrag = 1 - Math.min(0.35, mismatches * 0.07);
-    const deckWeight = Math.pow(deckConfidence + 0.1, 2) * topDeckBoost * mismatchDrag * popularityWeight;
-
-    prediction.deck.cards.forEach((cardName) => {
+  // Iterate ALL cards to calculate scores based on ML + Game State Heuristics
+  CARDS.forEach((card) => {
+      const cardName = card.name;
+      const mlScore = mlRawScores[cardName] || 0.001;
+      
       const lastSeen = lastSeenIndex.has(cardName) ? lastSeenIndex.get(cardName)! : -1;
       const playsSinceSeen = lastSeen === -1 ? totalPlays : totalPlays - lastSeen - 1;
       const usageStats = CARD_USAGE_STATS[cardName];
-      const popularity = usageStats?.usageRate ?? 0.18;
       const expectedCycle = usageStats?.avgCycleLength ?? 4.0;
       const tempoProfile = getTempoProfile(cardName);
       const elixirCost = elixirForCard(cardName);
 
-      // Respect the Clash Royale draw rule: a card cannot be redrawn until four
-      // other cards have been played. While unseen cards are exempt, recently used
-      // cards are clamped to zero probability until their cooldown expires.
+      // 1. GAME RULES: Cycle Cooldown
       const requiredGap = Math.max(4, Math.round(expectedCycle));
       const cycleReady = lastSeen === -1 ? true : playsSinceSeen >= requiredGap;
       const cooldownPenalty = cycleReady ? 1 : 0;
 
-      // Once the card clears the hard gate, ramp its urgency as it approaches
-      // the expected cycle point and taper it as it lingers deep in the deck.
+      // 2. CYCLE LOGIC
       const overshoot = lastSeen === -1 ? 0 : Math.max(0, playsSinceSeen - requiredGap);
       const cycleMomentum = lastSeen === -1 ? 1.05 : 1 + Math.min(0.6, overshoot * 0.12);
-
-      // Unseen cards are urgent to surface; cards missing from the deck get a bump.
-      const unseenBonus = lastSeen === -1 ? 1.25 : 1;
-      const missingBonus = prediction.missingCards.includes(cardName) ? 1.2 : 0.9;
-
-      // Long downtime after being seen suggests a hand backfill is imminent but
-      // we avoid runaway growth by slightly damping extremely old sightings.
+      // Boost unseen cards slightly to encourage discovering the full deck
+      const unseenBonus = lastSeen === -1 ? 1.2 : 1; 
+      
+      // 3. TEMPO & STATE
       const fatiguePenalty = Math.max(0.65, 1 - Math.max(0, playsSinceSeen - 9) * 0.03);
-
-      // Popular, frequently cycled cards should start with a stronger prior.
-      const popularityPrior = 0.65 + popularity * 0.8;
-
-      // Aggression/tempo modeling: early-cycle win conditions like Hog Rider surge
-      // before midgame, while beatdown units wait for high elixir banks.
       const openerBonus = 1 + tempoProfile.openingAggro * Math.max(0, 1 - tempoPhase);
+      
       const beatdownBonus =
         tempoProfile.beatdownThreshold !== undefined
           ? 1 + Math.max(0, currentElixir - tempoProfile.beatdownThreshold) * (tempoProfile.beatdownWeight ?? 0.1)
           : 1;
 
-      // Encourage plays as the opponent approaches max elixir to avoid leak (e.g., Pump, spawners).
       const overflowBonus = 1 + elixirPressure * 0.15 * (1 + (tempoProfile.overflowGreed ?? 0));
 
-      // Elixir affordability: cards far out of reach should effectively vanish, while cheap cycle
-      // options get rewarded when the opponent is starved on elixir.
       const elixirGap = elixirCost - currentElixir;
       const affordability =
         elixirGap <= 0
@@ -253,68 +243,50 @@ export const calculateCardLikelihoods = (seenCards: string[], currentElixir = 5)
       const elixirMomentum = 1 + Math.max(0, currentElixir - elixirCost) * 0.08;
       const lowElixirCycleBoost = currentElixir < 3 && elixirCost <= currentElixir ? 1.12 : 1;
 
-      // Cycling nuance: if a card typically spins quickly and is ready, it should reappear sooner.
       const cycleBias = tempoProfile.cycleBias ?? 0;
       const cycleUrgency = 1 + cycleBias * Math.max(0, 1 - playsSinceSeen / Math.max(expectedCycle * 1.5, 1));
       const firstStrikeBonus = lastSeen === -1 ? 1 + (tempoProfile.firstStrikeBonus ?? 0) : 1;
-
-      // Cards that get delayed (e.g., defensive buildings) decelerate if the opponent is still in early elixir curves.
       const defensiveDrag = elixirCost >= 5 && tempoPhase < 0.35 ? 0.9 : 1;
 
-      // --- SYNERGY & COMBO MOMENTUM ---
+      // 4. SYNERGY (Next-Card Prediction)
       let synergyMomentum = 1;
-      
-      // Elixir Curve Synergy
       if (lastCost >= 6) {
-          // Last was heavy: Expect Support/Spell (<= 4 elixir)
           if (elixirCost <= 4) synergyMomentum *= 1.15;
-          // Unlikely to play another heavy card immediately
           if (elixirCost >= 6) synergyMomentum *= 0.85; 
       } else if (lastCost <= 2) {
-          // Last was cheap cycle: Expect Cycle (to rotate) or Big Card (cycle complete)
           if (elixirCost <= 2) synergyMomentum *= 1.1; 
           if (elixirCost >= 5) synergyMomentum *= 1.1;
       }
-
-      // Role Synergy
       const isSpell = SPELLS.has(cardName);
       const isWinCon = WIN_CONDITIONS.has(cardName);
-      
-      // Win Condition -> Predictive Spell (e.g., Hog + Log)
       if (lastIsWinCon && isSpell) synergyMomentum *= 1.25;
-      
-      // Tank -> Support (e.g., Golem + Night Witch)
-      // Support is defined here as non-spell, non-wincon (mostly)
       if (lastIsTank && !isSpell && !isWinCon && elixirCost <= 5) synergyMomentum *= 1.2;
 
-      // --- DATA-DRIVEN STATE SYNERGY ---
+      // 5. DATA-DRIVEN STATE SYNERGY (Elixir Context)
       let stateSynergy = 1;
       const elixirStats = CARD_ELIXIR_STATS[cardName];
       if (elixirStats) {
           const avgDeckCost = elixirStats.avgDeckCost;
-          
-          // High Elixir Context: Opponent is banking elixir (>= 7.5)
           if (currentElixir >= 7.5) {
-              // Boost cards typically found in heavy decks
               if (avgDeckCost >= 3.8) stateSynergy *= 1.15;
-              // Boost expensive win conditions/tanks specifically
               if (elixirCost >= 6) stateSynergy *= 1.25;
-          } 
-          // Low Elixir Context: Opponent is low (<= 4)
-          else if (currentElixir <= 4) {
-              // Boost cards typically found in cycle decks
+          } else if (currentElixir <= 4) {
               if (avgDeckCost <= 3.2) stateSynergy *= 1.12;
           }
       }
 
-      const cardScore =
-        deckWeight *
+      // FINAL SCORE COMPOSITION
+      // ML Score is the heavy "Base Probability". 
+      // We square it to act as a strong filter, separating likely deck cards from noise.
+      // Then we apply game-state multipliers to predict the *next* play among the likely cards.
+      const mlPower = Math.pow(mlScore, 2) * 100;
+
+      const totalScore =
+        mlPower *
         cooldownPenalty *
         cycleMomentum *
         unseenBonus *
-        missingBonus *
         fatiguePenalty *
-        popularityPrior *
         openerBonus *
         beatdownBonus *
         overflowBonus *
@@ -327,8 +299,7 @@ export const calculateCardLikelihoods = (seenCards: string[], currentElixir = 5)
         synergyMomentum *
         stateSynergy;
 
-      likelihoodAccumulator[cardName] = (likelihoodAccumulator[cardName] || 0) + cardScore;
-    });
+      likelihoodAccumulator[cardName] = totalScore;
   });
 
   const maxScore = Math.max(0, ...Object.values(likelihoodAccumulator));
