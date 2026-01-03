@@ -2,21 +2,21 @@ package com.thijsvndmeer.clashcounter;
 
 import android.app.Service;
 import android.content.Intent;
+import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
-import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.webkit.ConsoleMessage;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
-
-import android.util.Log;
-import android.graphics.Color;
 
 public class OverlayService extends Service {
     private static final String TAG = "OverlayService";
@@ -117,7 +117,7 @@ public class OverlayService extends Service {
         // Ensure the window has at least some height so it doesn't collapse to 0 while
         // loading
         touchLayout.setMinimumHeight((int) (150 * metrics.density));
-        
+
         // DEBUG: Set background to see the window frame
         touchLayout.setBackgroundColor(Color.argb(100, 255, 0, 0)); // Semi-transparent RED
 
@@ -137,11 +137,6 @@ public class OverlayService extends Service {
         windowManager.addView(touchLayout, params);
         Log.d(TAG, "OverlayService view added to window manager");
     }
-
-import android.webkit.ConsoleMessage;
-import android.webkit.WebChromeClient;
-
-// ... inside OverlayService ...
 
     private void setupWebView() {
         WebSettings settings = webView.getSettings();
@@ -172,7 +167,7 @@ import android.webkit.WebChromeClient;
                         "window.location.hash = '#overlay'; window.dispatchEvent(new HashChangeEvent('hashchange'));",
                         null);
             }
-            
+
             @Override
             public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
                 Log.e(TAG, "WebView Error: " + description + " URL: " + failingUrl);
