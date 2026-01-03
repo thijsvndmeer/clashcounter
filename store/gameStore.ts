@@ -7,7 +7,7 @@ interface GameState {
   isOverlayMode: boolean;
   definitiveDeck: string[] | null;
   gameTime: number; // Elapsed time in seconds
-  
+
   // Actions
   addSeenCard: (cardName: string, elixirCost: number) => void;
   tick: (deltaSeconds: number) => void;
@@ -15,6 +15,9 @@ interface GameState {
   setElixir: (value: number) => void;
   togglePlay: () => void;
   toggleOverlayMode: () => void;
+  setOverlayMode: (value: boolean) => void;
+  overlayScale: number;
+  setOverlayScale: (scale: number) => void;
 }
 
 // Base rate: 0.266 elixir per second (as originally requested/configured)
@@ -29,6 +32,7 @@ export const useGameStore = create<GameState>((set) => ({
   isOverlayMode: false,
   definitiveDeck: null,
   gameTime: 0,
+  overlayScale: 1.0,
 
   addSeenCard: (cardName, elixirCost) => set((state) => {
     if (state.definitiveDeck && !state.definitiveDeck.includes(cardName)) {
@@ -37,7 +41,7 @@ export const useGameStore = create<GameState>((set) => ({
 
     const newSeen = [...state.seenCards, cardName];
     let definitiveDeck = state.definitiveDeck;
-    
+
     if (!definitiveDeck) {
       const uniqueInOrder: string[] = [];
       for (const card of newSeen) {
@@ -64,27 +68,27 @@ export const useGameStore = create<GameState>((set) => ({
 
   tick: (deltaSeconds) => set((state) => {
     if (!state.isPlaying) return {};
-    
+
     const nextTime = state.gameTime + deltaSeconds;
-    
+
     // Determine Multiplier
     // 0-120s (First 2 mins): 1x
     // 120s-240s (Last min regular + First min OT): 2x
     // 240s+ (Last min OT): 3x
     let multiplier = 1;
     if (nextTime >= 240) {
-        multiplier = 3;
+      multiplier = 3;
     } else if (nextTime >= 120) {
-        multiplier = 2;
+      multiplier = 2;
     }
 
     const regen = deltaSeconds * BASE_ELIXIR_RATE * multiplier;
     let nextElixir = state.currentElixir + regen;
     if (nextElixir > MAX_ELIXIR) nextElixir = MAX_ELIXIR;
 
-    return { 
-        currentElixir: nextElixir,
-        gameTime: nextTime
+    return {
+      currentElixir: nextElixir,
+      gameTime: nextTime
     };
   }),
 
@@ -102,5 +106,9 @@ export const useGameStore = create<GameState>((set) => ({
 
   togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
 
-  toggleOverlayMode: () => set((state) => ({ isOverlayMode: !state.isOverlayMode }))
+  toggleOverlayMode: () => set((state) => ({ isOverlayMode: !state.isOverlayMode })),
+
+  setOverlayMode: (value: boolean) => set({ isOverlayMode: value }),
+
+  setOverlayScale: (scale: number) => set({ overlayScale: Math.min(Math.max(scale, 0.5), 2.0) })
 }));

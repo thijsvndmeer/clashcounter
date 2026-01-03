@@ -2,32 +2,118 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body {
-    @apply bg-gray-950 text-gray-200 antialiased overscroll-none;
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  }
+:root {
+  --color-clash-blue: #4C8BD9;
+  --color-clash-red: #D94C4C;
+  --color-clash-yellow: #FFD000;
+  --color-clash-yellow-shadow: #CD8C00;
+  --color-clash-bg: #121721;
+  --color-clash-panel: #2B3545;
+  --font-heading: 'Lilita One', cursive, system-ui;
+  --font-body: 'Rubik', sans-serif;
 }
 
-@layer utilities {
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-clash-bg);
+  color: white;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar styling */
+body.is-overlay-mode {
+  background-color: transparent !important;
+}
+
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #1a1a1a;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #4b5563;
+  background: #444;
   border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Text Stroke Utility */
+.text-stroke-black {
+  -webkit-text-stroke: 1px black;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+.text-stroke-sm {
+  -webkit-text-stroke: 0.5px black;
+}
+
+/* Clash Button Style */
+.btn-clash {
+  position: relative;
+  background: linear-gradient(to bottom, #4C8BD9, #3A6FB0);
+  border: 2px solid #1A3C6E;
+  border-radius: 6px;
+  color: white;
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 0 #1A3C6E, 0 5px 5px rgba(0, 0, 0, 0.3);
+  transition: all 0.1s ease;
+}
+
+.btn-clash:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 #1A3C6E, 0 0 0 rgba(0, 0, 0, 0.3);
+}
+
+.btn-clash-yellow {
+  background: linear-gradient(to bottom, #FFD000, #F5A623);
+  border: 2px solid #CD8C00;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 0 #CD8C00, 0 5px 5px rgba(0, 0, 0, 0.3);
+}
+
+.btn-clash-yellow:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 #CD8C00;
+}
+
+.btn-clash-red {
+  background: linear-gradient(to bottom, #FF5E5E, #D94C4C);
+  border: 2px solid #8B2D2D;
+  box-shadow: 0 4px 0 #8B2D2D, 0 5px 5px rgba(0, 0, 0, 0.3);
+}
+
+.btn-clash-red:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 #8B2D2D;
+}
+
+/* Panel Background */
+.panel-clash {
+  background-color: var(--color-clash-panel);
+  border: 2px solid #151B26;
+  border-radius: 12px;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
 }

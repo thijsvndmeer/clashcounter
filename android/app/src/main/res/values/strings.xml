@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ClashCounter</string>
+    <string name="title_activity_main">ClashCounter</string>
+    <string name="package_name">com.thijsvndmeer.clashcounter</string>
+    <string name="custom_url_scheme">com.thijsvndmeer.clashcounter</string>
+</resources>
