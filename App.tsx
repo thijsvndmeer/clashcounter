@@ -169,10 +169,9 @@ const App: React.FC = () => {
     if (isOverlayMode && scaledElementRef.current) {
       const updateSize = () => {
         if (scaledElementRef.current) {
-          const rect = scaledElementRef.current.getBoundingClientRect();
           const dpr = window.devicePixelRatio || 1;
-          const width = Math.ceil(rect.width * dpr);
-          const height = Math.ceil(rect.height * dpr);
+          const width = Math.ceil(scaledElementRef.current.offsetWidth * overlayScale * dpr);
+          const height = Math.ceil(scaledElementRef.current.offsetHeight * overlayScale * dpr);
 
           if (Capacitor.isNativePlatform()) {
             Overlay.resize({ width, height }).catch(e => console.error("Resize failed", e));
@@ -180,7 +179,6 @@ const App: React.FC = () => {
         }
       };
 
-      // Update size on initial render and after scale changes
       const animationFrameId = requestAnimationFrame(updateSize);
 
       return () => cancelAnimationFrame(animationFrameId);
