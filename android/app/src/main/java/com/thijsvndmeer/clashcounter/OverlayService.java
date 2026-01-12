@@ -2,21 +2,22 @@ package com.thijsvndmeer.clashcounter;
 
 import android.app.Service;
 import android.content.Intent;
+import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.webkit.ConsoleMessage;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
-
-import android.util.Log;
-import android.graphics.Color;
 
 public class OverlayService extends Service {
     private static final String TAG = "OverlayService";
@@ -114,15 +115,11 @@ public class OverlayService extends Service {
                 return true;
             }
         };
-        // Ensure the window has at least some height so it doesn't collapse to 0 while
-        // loading
-        touchLayout.setMinimumHeight((int) (150 * metrics.density));
+                // Ensure the window has at least some height so it doesn't collapse to 0 while
+                // loading
+                touchLayout.setMinimumHeight((int) (150 * metrics.density));
         
-        // DEBUG: Set background to see the window frame
-        touchLayout.setBackgroundColor(Color.argb(100, 255, 0, 0)); // Semi-transparent RED
-
-        // Initialize WebView
-        webView = new WebView(this);
+                // Initialize WebView        webView = new WebView(this);
         setupWebView();
 
         // Add WebView to Container
@@ -138,11 +135,6 @@ public class OverlayService extends Service {
         Log.d(TAG, "OverlayService view added to window manager");
     }
 
-import android.webkit.ConsoleMessage;
-import android.webkit.WebChromeClient;
-
-// ... inside OverlayService ...
-
     private void setupWebView() {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -151,6 +143,10 @@ import android.webkit.WebChromeClient;
         settings.setAllowContentAccess(true);
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setAllowUniversalAccessFromFileURLs(true);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -172,7 +168,7 @@ import android.webkit.WebChromeClient;
                         "window.location.hash = '#overlay'; window.dispatchEvent(new HashChangeEvent('hashchange'));",
                         null);
             }
-            
+
             @Override
             public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
                 Log.e(TAG, "WebView Error: " + description + " URL: " + failingUrl);
@@ -185,7 +181,7 @@ import android.webkit.WebChromeClient;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        String url = "file:///android_asset/public/index.html?mode=overlay";
+        String url = "file:///android_asset/public/index.html";
         if (intent != null && intent.getStringExtra("url") != null) {
             url = intent.getStringExtra("url");
         }

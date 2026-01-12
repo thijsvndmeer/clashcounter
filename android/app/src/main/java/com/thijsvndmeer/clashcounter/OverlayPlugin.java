@@ -28,7 +28,7 @@ public class OverlayPlugin extends Plugin {
             return;
         }
 
-        String url = call.getString("url", "file:///android_asset/public/index.html?mode=overlay");
+        String url = call.getString("url", "file:///android_asset/public/index.html");
 
         Intent intent = new Intent(context, OverlayService.class);
         intent.putExtra("url", url);
