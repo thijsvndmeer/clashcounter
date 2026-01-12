@@ -12,12 +12,21 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.ContextThemeWrapper;
 import android.webkit.ConsoleMessage;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.Context;
+import android.content.pm.ServiceInfo;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import androidx.core.app.NotificationCompat;
 
 public class OverlayService extends Service {
     private static final String TAG = "OverlayService";
@@ -25,6 +34,7 @@ public class OverlayService extends Service {
     private FrameLayout touchLayout;
     private WebView webView;
     private WindowManager.LayoutParams params;
+    private BroadcastReceiver resizeReceiver;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -52,7 +62,7 @@ public class OverlayService extends Service {
 
         params = new WindowManager.LayoutParams(
                 (int) (screenWidth * 0.9),
-                (int) (400 * metrics.density), // FIXED HEIGHT for debugging
+                ViewGroup.LayoutParams.WRAP_CONTENT, // Dynamic height
                 layoutFlag,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT);
@@ -115,11 +125,12 @@ public class OverlayService extends Service {
                 return true;
             }
         };
-                // Ensure the window has at least some height so it doesn't collapse to 0 while
-                // loading
-                touchLayout.setMinimumHeight((int) (150 * metrics.density));
-        
-                // Initialize WebView        webView = new WebView(this);
+        // Ensure the window has at least some height so it doesn't collapse to 0 while
+        // loading
+        touchLayout.setMinimumHeight((int) (150 * metrics.density));
+
+        // Initialize WebView
+        webView = new WebView(new ContextThemeWrapper(this, R.style.AppTheme));
         setupWebView();
 
         // Add WebView to Container
@@ -133,19 +144,50 @@ public class OverlayService extends Service {
         // Add Container to Window
         windowManager.addView(touchLayout, params);
         Log.d(TAG, "OverlayService view added to window manager");
+
+        // Register Resize Receiver
+        resizeReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if ("com.thijsvndmeer.clashcounter.OVERLAY_RESIZE".equals(intent.getAction())) {
+                    int width = intent.getIntExtra("width", params.width);
+                    int height = intent.getIntExtra("height", params.height);
+
+                    // Clamp to Screen Size (Safety)
+                    android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+                    if (width > dm.widthPixels)
+                        width = dm.widthPixels;
+                    if (height > dm.heightPixels)
+                        height = dm.heightPixels;
+
+                    params.width = width;
+                    params.height = height;
+
+                    if (touchLayout != null) {
+                        windowManager.updateViewLayout(touchLayout, params);
+                    }
+                }
+            }
+        };
+        if (Build.VERSION.SDK_INT >= 34) {
+            registerReceiver(resizeReceiver, new IntentFilter("com.thijsvndmeer.clashcounter.OVERLAY_RESIZE"),
+                    Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(resizeReceiver, new IntentFilter("com.thijsvndmeer.clashcounter.OVERLAY_RESIZE"));
+        }
     }
 
     private void setupWebView() {
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
-        settings.setAllowFileAccessFromFileURLs(true);
-        settings.setAllowUniversalAccessFromFileURLs(true);
+        WebSettings webSettings = webView.getSettings();
+        webSettings.setJavaScriptEnabled(true);
+        webSettings.setDomStorageEnabled(true);
+        webSettings.setAllowFileAccess(true);
+        webSettings.setAllowContentAccess(true);
+        webSettings.setAllowFileAccessFromFileURLs(true);
+        webSettings.setAllowUniversalAccessFromFileURLs(true);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         }
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -181,13 +223,49 @@ public class OverlayService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        createNotificationChannel();
+        Notification notification = createNotification();
+
+        if (Build.VERSION.SDK_INT >= 34) { // Android 14+
+            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        } else {
+            startForeground(1, notification);
+        }
+
         String url = "file:///android_asset/public/index.html";
         if (intent != null && intent.getStringExtra("url") != null) {
             url = intent.getStringExtra("url");
         }
         Log.d(TAG, "onStartCommand loading url: " + url);
-        webView.loadUrl(url);
+
+        if (webView != null) {
+            webView.loadUrl(url);
+        }
+
         return START_STICKY;
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel serviceChannel = new NotificationChannel(
+                    "OverlayServiceChannel",
+                    "Overlay Service Channel",
+                    NotificationManager.IMPORTANCE_DEFAULT);
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) {
+                manager.createNotificationChannel(serviceChannel);
+            }
+        }
+    }
+
+    private Notification createNotification() {
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "OverlayServiceChannel")
+                .setContentTitle("Clash Counter Overlay")
+                .setContentText("Overlay is running")
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+
+        return builder.build();
     }
 
     @Override
@@ -195,6 +273,13 @@ public class OverlayService extends Service {
         super.onDestroy();
         if (touchLayout != null) {
             windowManager.removeView(touchLayout);
+        }
+        if (resizeReceiver != null) {
+            try {
+                unregisterReceiver(resizeReceiver);
+            } catch (IllegalArgumentException e) {
+                // Already unregistered or not registered
+            }
         }
     }
 }

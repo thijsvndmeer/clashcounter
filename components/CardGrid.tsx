@@ -50,8 +50,8 @@ const CardButton = memo(({
       containerStyle = 'bg-[#2B3545] border-[#374151] shadow-[0_0_6px_rgba(255,208,0,0.15)]';
     }
 
-    // "Small Mode" specific: Transparent borders request
-    const borderClass = isOverlayMode ? '!border-transparent' : '';
+    // "Small Mode" specific: Transparent borders request, UNLESS seen/highlighted
+    const borderClass = (isOverlayMode && !isSeen && !isInHand && !isNext) ? '!border-transparent' : '';
 
     return (
       <button
@@ -280,7 +280,7 @@ export const CardGrid: React.FC = React.memo(() => {
     if (isDeckLocked) {
       // Locked Overlay Layout
       return (
-        <div className="w-full p-1 bg-clash-bg">
+        <div className="w-full p-1 bg-transparent">
           <div className="grid grid-cols-4 gap-1.5">
             {displayCards.map((originalCard) => {
               const isMirror = originalCard.name === 'Mirror';
@@ -309,7 +309,7 @@ export const CardGrid: React.FC = React.memo(() => {
     // Unlocked Overlay (Predictions) Layout
     // Enable smooth horizontal scrolling and snapping
     return (
-      <div className="w-full overflow-hidden bg-clash-bg">
+      <div className="w-full overflow-hidden bg-transparent">
         <div className="flex overflow-x-auto gap-1.5 p-1.5 scrollbar-hide snap-x scroll-smooth">
           {displayCards.map((originalCard) => {
             const isMirror = originalCard.name === 'Mirror';

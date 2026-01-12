@@ -18,7 +18,8 @@ public class OverlayPlugin extends Plugin {
     @PluginMethod
     public void start(PluginCall call) {
         Context context = getContext();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                !Settings.canDrawOverlays(context)) {
             // Request Permission
             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:" + context.getPackageName()));
@@ -28,11 +29,17 @@ public class OverlayPlugin extends Plugin {
             return;
         }
 
-        String url = call.getString("url", "file:///android_asset/public/index.html");
+        String url = call.getString("url",
+                "file:///android_asset/public/index.html");
 
         Intent intent = new Intent(context, OverlayService.class);
         intent.putExtra("url", url);
-        context.startService(intent);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent);
+        } else {
+            context.startService(intent);
+        }
 
         call.resolve();
     }
@@ -42,6 +49,27 @@ public class OverlayPlugin extends Plugin {
         Context context = getContext();
         Intent intent = new Intent(context, OverlayService.class);
         context.stopService(intent);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void resize(PluginCall call) {
+        Integer width = call.getInt("width");
+        Integer height = call.getInt("height");
+
+        if (width == null || height == null) {
+            call.reject("Width and height are required");
+            return;
+        }
+
+        Context context = getContext();
+        Intent intent = new Intent("com.thijsvndmeer.clashcounter.OVERLAY_RESIZE");
+        intent.putExtra("width", width);
+        intent.putExtra("height", height);
+        // Explicitly set package to ensure security and that it reaches our app
+        intent.setPackage(context.getPackageName());
+        context.sendBroadcast(intent);
+
         call.resolve();
     }
 }

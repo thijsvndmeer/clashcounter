@@ -43,7 +43,7 @@ export const ElixirBar: React.FC = React.memo(() => {
 
   if (isOverlayMode) {
     return (
-      <div className="w-full relative h-full flex items-center overflow-hidden bg-clash-bg/50 border-2 border-clash-panel shadow-inner rounded-md">
+      <div className="w-full relative h-full flex items-center overflow-hidden bg-transparent rounded-md">
         {/* Fill Bar */}
         <div className="absolute inset-0 w-full h-full">
           <div
