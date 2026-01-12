@@ -33,8 +33,10 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isOverlayMode) {
       document.body.classList.add('is-overlay-mode');
+      document.documentElement.classList.add('is-overlay-mode');
     } else {
       document.body.classList.remove('is-overlay-mode');
+      document.documentElement.classList.remove('is-overlay-mode');
     }
   }, [isOverlayMode]);
 
@@ -205,7 +207,6 @@ const App: React.FC = () => {
       >
         <div
           ref={overlayRef}
-          className={`
           className={`
               flex flex-col w-full rounded-2xl border overflow-hidden transition-all duration-300
           ${isDeckLocked ? 'border-[#4C8BD9]/50 shadow-[0_0_20px_rgba(76,139,217,0.2)]' : 'border-[#2D3748] shadow-2xl'}
