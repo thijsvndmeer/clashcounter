@@ -64,14 +64,15 @@ public class OverlayService extends Service {
                 ViewGroup.LayoutParams.WRAP_CONTENT, // Dynamic height
                 layoutFlag,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT);
+                PixelFormat.RGBA_8888);
 
         params.gravity = Gravity.TOP | Gravity.START;
         params.x = (int) (screenWidth * 0.05);
         params.y = 100;
 
         // Container Layout to handle touches
-        touchLayout = new FrameLayout(this) {
+        Context themeContext = new ContextThemeWrapper(this, R.style.AppTheme);
+        touchLayout = new FrameLayout(themeContext) {
             private int initialX;
             private int initialY;
             private float initialTouchX;
@@ -127,6 +128,7 @@ public class OverlayService extends Service {
         // Ensure the window has at least some height so it doesn't collapse to 0 while
         // loading
         touchLayout.setMinimumHeight((int) (150 * metrics.density));
+        touchLayout.setBackgroundColor(Color.TRANSPARENT);
 
         // Initialize WebView
         webView = new WebView(new ContextThemeWrapper(this, R.style.AppTheme));
