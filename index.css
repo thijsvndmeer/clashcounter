@@ -13,6 +13,7 @@
   --font-body: 'Rubik', sans-serif;
 }
 
+html,
 body {
   font-family: var(--font-body);
   background-color: var(--color-clash-bg);
@@ -21,8 +22,18 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html.is-overlay-mode,
 body.is-overlay-mode {
   background-color: transparent !important;
+}
+
+#root {
+  min-height: 100vh;
+  background-color: var(--color-clash-bg);
+}
+
+body.is-overlay-mode #root {
+  background-color: transparent;
 }
 
 /* Custom Scrollbar */

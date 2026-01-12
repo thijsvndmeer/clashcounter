@@ -33,8 +33,10 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isOverlayMode) {
       document.body.classList.add('is-overlay-mode');
+      document.documentElement.classList.add('is-overlay-mode');
     } else {
       document.body.classList.remove('is-overlay-mode');
+      document.documentElement.classList.remove('is-overlay-mode');
     }
   }, [isOverlayMode]);
 
