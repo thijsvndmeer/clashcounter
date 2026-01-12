@@ -280,8 +280,8 @@ export const CardGrid: React.FC = React.memo(() => {
     if (isDeckLocked) {
       // Locked Overlay Layout
       return (
-        <div className="w-full p-1 bg-transparent">
-          <div className="grid grid-cols-4 gap-1.5">
+        <div className="w-full overflow-hidden bg-transparent">
+          <div className="flex overflow-x-auto gap-1.5 p-1.5 scrollbar-hide snap-x scroll-smooth">
             {displayCards.map((originalCard) => {
               const isMirror = originalCard.name === 'Mirror';
               const card = isMirror ? { ...originalCard, elixir: mirrorCost } : originalCard;

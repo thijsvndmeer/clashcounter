@@ -128,7 +128,7 @@ public class OverlayService extends Service {
         // Ensure the window has at least some height so it doesn't collapse to 0 while
         // loading
         touchLayout.setMinimumHeight((int) (150 * metrics.density));
-        touchLayout.setBackgroundColor(Color.TRANSPARENT);
+        touchLayout.setBackgroundColor(0x00000000);
 
         // Initialize WebView
         webView = new WebView(new ContextThemeWrapper(this, R.style.AppTheme));

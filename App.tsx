@@ -216,7 +216,7 @@ const App: React.FC = () => {
             transform: `scale(${overlayScale})`,
             transformOrigin: 'top left',
             // We use a fixed width container that scales
-            width: '100%',
+            width: '260px',
           }}
         >
           {/* Row 1: Integrated Elixir Bar & Controls */}
