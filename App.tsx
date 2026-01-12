@@ -14,7 +14,7 @@ interface OverlayPlugin {
 const Overlay = registerPlugin<OverlayPlugin>('Overlay');
 
 const App: React.FC = () => {
-  const { tick, isPlaying, resetGame, togglePlay, isOverlayMode, toggleOverlayMode, definitiveDeck, gameTime, setOverlayMode } = useGameStore();
+  const { tick, isPlaying, resetGame, togglePlay, isOverlayMode, toggleOverlayMode, definitiveDeck, gameTime, setOverlayMode, overlayScale, setOverlayScale } = useGameStore();
 
   // Handle URL params for Overlay Mode (Native)
   useEffect(() => {
@@ -112,7 +112,6 @@ const App: React.FC = () => {
   };
 
   const timerDisplay = formatGameTime(gameTime);
-  const { overlayScale, setOverlayScale } = useGameStore();
 
   // --- GESTURE LOGIC (PointerEvents) ---
   const activePointers = useRef<Map<number, { x: number, y: number }>>(new Map());
@@ -163,42 +162,38 @@ const App: React.FC = () => {
     }
   };
 
-  // --- OVERLAY RESIZE WATCHER ---
-  const overlayRef = useRef<HTMLDivElement>(null);
+  // --- OVERLAY RESIZE ---
+  const scaledElementRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isOverlayMode) return;
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.contentRect) {
-          // Add a small buffer or ensure exact pixels
-          // We use Math.ceil to avoid sub-pixel clipping
-          // IMPORTANT: Convert CSS pixels to Device Pixels for Android WindowManager
+    if (isOverlayMode && scaledElementRef.current) {
+      const updateSize = () => {
+        if (scaledElementRef.current) {
+          const rect = scaledElementRef.current.getBoundingClientRect();
           const dpr = window.devicePixelRatio || 1;
-          const width = Math.ceil(entry.contentRect.width * overlayScale * dpr);
-          const height = Math.ceil(entry.contentRect.height * overlayScale * dpr);
+          const width = Math.ceil(rect.width * dpr);
+          const height = Math.ceil(rect.height * dpr);
 
           if (Capacitor.isNativePlatform()) {
             Overlay.resize({ width, height }).catch(e => console.error("Resize failed", e));
           }
         }
-      }
-    });
+      };
 
-    if (overlayRef.current) {
-      resizeObserver.observe(overlayRef.current);
+      // Update size on initial render and after scale changes
+      const animationFrameId = requestAnimationFrame(updateSize);
+
+      return () => cancelAnimationFrame(animationFrameId);
     }
-
-    return () => resizeObserver.disconnect();
   }, [isOverlayMode, overlayScale]);
+
 
   // --- OVERLAY MODE RENDER ---
   if (isOverlayMode) {
     return (
       <div
-        className="w-full h-auto min-h-0 bg-transparent overflow-hidden"
-        style={{ touchAction: 'none', width: 'fit-content', height: 'fit-content' }} // Fit content for resize observer
+        className="h-auto min-h-0 bg-transparent overflow-hidden"
+        style={{ touchAction: 'none', width: 'fit-content', height: 'fit-content' }}
         onPointerDown={handleGestureStart}
         onPointerMove={handleGestureMove}
         onPointerUp={handleGestureEnd}
@@ -206,16 +201,15 @@ const App: React.FC = () => {
         onPointerLeave={handleGestureEnd}
       >
         <div
-          ref={overlayRef}
+          ref={scaledElementRef}
           className={`
-              flex flex-col w-full rounded-2xl border overflow-hidden transition-all duration-300
+              flex flex-col w-full rounded-2xl border overflow-hidden
           ${isDeckLocked ? 'border-[#4C8BD9]/50 shadow-[0_0_20px_rgba(76,139,217,0.2)]' : 'border-[#2D3748] shadow-2xl'}
           bg-[#1C212E]/90 backdrop-blur-xl
             `}
           style={{
             transform: `scale(${overlayScale})`,
             transformOrigin: 'top left',
-            // We use a fixed width container that scales
             width: '260px',
           }}
         >
@@ -232,7 +226,7 @@ const App: React.FC = () => {
               <div className="flex items-center gap-2">
                 <button
                   onPointerDown={(e) => e.stopPropagation()}
-                  onClick={togglePlay}
+                  onClick={isPlaying ? resetGame : togglePlay}
                   className={`
                       h-7 px-3 rounded-full flex items-center justify-center gap-1.5 
                       text-[11px] font-bold uppercase tracking-wider shadow-sm transition-all active:scale-95

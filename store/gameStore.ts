@@ -30,7 +30,6 @@ export const useGameStore = create<GameState>((set) => ({
   seenCards: [],
   isPlaying: false,
   isOverlayMode: false,
-  definitiveDeck: null,
   gameTime: 0,
   overlayScale: 1.0,
 
@@ -110,5 +109,5 @@ export const useGameStore = create<GameState>((set) => ({
 
   setOverlayMode: (value: boolean) => set({ isOverlayMode: value }),
 
-  setOverlayScale: (scale: number) => set({ overlayScale: Math.min(Math.max(scale, 0.5), 2.0) })
+  setOverlayScale: (scale: number) => set({ overlayScale: Math.min(Math.max(scale, 0.5), 1.0) })
 }));

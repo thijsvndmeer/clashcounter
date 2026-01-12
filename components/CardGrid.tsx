@@ -45,7 +45,11 @@ const CardButton = memo(({
     }
 
     if (isInHand && !isMirrorInvalid) {
-      containerStyle = 'bg-[#2B3545] border-[#374151] shadow-[0_0_6px_rgba(76,139,217,0.15)]';
+      if (canAfford) {
+        containerStyle = 'bg-[#2B3545] border-[#374151] shadow-[0_0_6px_rgba(76,139,217,0.15)]';
+      } else {
+        containerStyle = 'bg-black/60 border-[#374151] opacity-50 grayscale';
+      }
     } else if (isNext && !isMirrorInvalid) {
       containerStyle = 'bg-[#2B3545] border-[#374151] shadow-[0_0_6px_rgba(255,208,0,0.15)]';
     }
@@ -154,6 +158,7 @@ export const CardGrid: React.FC = React.memo(() => {
   const addSeenCard = useGameStore(state => state.addSeenCard);
   const isOverlayMode = useGameStore(state => state.isOverlayMode);
   const definitiveDeck = useGameStore(state => state.definitiveDeck);
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
   // CRITICAL OPTIMIZATION:
   // Subscribe ONLY to the FLOOR of currentElixir.
@@ -267,6 +272,14 @@ export const CardGrid: React.FC = React.memo(() => {
     if (isDeckLocked && definitiveDeck && !definitiveDeck.includes(card.name)) return;
     addSeenCard(card.name, card.elixir);
     if (filter) setFilter('');
+    if (scrollContainerRef.current) {
+      const element = scrollContainerRef.current;
+      element.classList.add('scroll-auto-important');
+      element.scrollLeft = 0;
+      requestAnimationFrame(() => {
+        element.classList.remove('scroll-auto-important');
+      });
+    }
   };
 
   // --- RENDER ---
@@ -280,8 +293,8 @@ export const CardGrid: React.FC = React.memo(() => {
     if (isDeckLocked) {
       // Locked Overlay Layout
       return (
-        <div className="w-full overflow-hidden bg-transparent">
-          <div className="flex overflow-x-auto gap-1.5 p-1.5 scrollbar-hide snap-x scroll-smooth">
+        <div className="w-full p-1 bg-transparent">
+          <div className="grid grid-cols-4 gap-1.5">
             {displayCards.map((originalCard) => {
               const isMirror = originalCard.name === 'Mirror';
               const card = isMirror ? { ...originalCard, elixir: mirrorCost } : originalCard;
@@ -310,7 +323,7 @@ export const CardGrid: React.FC = React.memo(() => {
     // Enable smooth horizontal scrolling and snapping
     return (
       <div className="w-full overflow-hidden bg-transparent">
-        <div className="flex overflow-x-auto gap-1.5 p-1.5 scrollbar-hide snap-x scroll-smooth">
+        <div ref={scrollContainerRef} className="flex overflow-x-auto gap-1.5 p-1.5 scrollbar-hide snap-x scroll-smooth">
           {displayCards.map((originalCard) => {
             const isMirror = originalCard.name === 'Mirror';
             const card = isMirror ? { ...originalCard, elixir: mirrorCost } : originalCard;

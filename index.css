@@ -128,3 +128,7 @@ body.is-overlay-mode #root {
   scrollbar-width: none;
   /* Firefox */
 }
+
+.scroll-auto-important {
+  scroll-behavior: auto !important;
+}
