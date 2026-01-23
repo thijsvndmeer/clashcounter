@@ -1,8 +1,13 @@
 {
-  "name": "cr-elixir-&-deck-tracker",
+  "name": "clashcounter",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://thijsvndmeer.github.io/clashcounter/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thijsvndmeer/clashcounter.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

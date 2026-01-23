@@ -13,6 +13,7 @@ interface CardButtonProps {
   isInHand: boolean;
   isNext: boolean;
   isMirrorInvalid: boolean;
+  isHorizontalScroll?: boolean;
   onClick: (card: Card) => void;
 }
 
@@ -24,6 +25,7 @@ const CardButton = memo(({
   isInHand,
   isNext,
   isMirrorInvalid,
+  isHorizontalScroll,
   onClick
 }: CardButtonProps) => {
 
@@ -35,9 +37,7 @@ const CardButton = memo(({
 
   // --- OVERLAY MODE STYLE ---
   if (isOverlayMode) {
-    let containerStyle = (canAfford && !isMirrorInvalid)
-      ? 'bg-[#2B3545] border-[#4B5563] hover:border-gray-400'
-      : 'bg-black/60 border-[#374151] opacity-50 grayscale';
+    let containerStyle = 'bg-[#2B3545] border-[#4B5563] hover:border-gray-400';
 
     // Override if previously seen (in filtered list) vs simply afford check
     if (isSeen) {
@@ -45,13 +45,14 @@ const CardButton = memo(({
     }
 
     if (isInHand && !isMirrorInvalid) {
-      if (canAfford) {
-        containerStyle = 'bg-[#2B3545] border-[#374151] shadow-[0_0_6px_rgba(76,139,217,0.15)]';
-      } else {
-        containerStyle = 'bg-black/60 border-[#374151] opacity-50 grayscale';
-      }
+      containerStyle = 'bg-[#2B3545] border-[#374151] shadow-[0_0_6px_rgba(76,139,217,0.15)]';
     } else if (isNext && !isMirrorInvalid) {
       containerStyle = 'bg-[#2B3545] border-[#374151] shadow-[0_0_6px_rgba(255,208,0,0.15)]';
+    }
+
+    // Always grey out if unaffordable or invalid
+    if (!canAfford || isMirrorInvalid) {
+      containerStyle = 'bg-black/60 border-[#374151] opacity-50 grayscale';
     }
 
     // "Small Mode" specific: Transparent borders request, UNLESS seen/highlighted
@@ -63,7 +64,7 @@ const CardButton = memo(({
         onClick={handleClick}
         className={`
           relative flex-shrink-0 flex flex-col items-center justify-center rounded-lg border-2 transition-all active:scale-95 snap-start
-          ${isOverlayMode ? 'w-14 h-16' : 'w-full aspect-[3/4]'} overflow-hidden animate-fade-in
+          ${isHorizontalScroll ? 'w-12 h-14' : isOverlayMode ? 'w-14 h-16' : 'w-full aspect-[3/4]'} overflow-hidden animate-fade-in
           ${containerStyle}
           ${isMirrorInvalid ? 'cursor-not-allowed' : ''}
           ${borderClass}
@@ -340,6 +341,7 @@ export const CardGrid: React.FC = React.memo(() => {
                 isInHand={false}
                 isNext={false}
                 isMirrorInvalid={isMirrorInvalid}
+                isHorizontalScroll={true}
                 onClick={handleCardClick}
               />
             );

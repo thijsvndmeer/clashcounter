@@ -34,7 +34,7 @@ A sophisticated, machine-learning-powered companion app for Clash Royale. This t
 
 1.  **Clone the repository**
     ```bash
-    git clone https://github.com/yourusername/clash-royale-tracker.git
+    git clone https://github.com/thijsvndmeer/clashcounter.git
     cd clash-royale-tracker
     ```
 

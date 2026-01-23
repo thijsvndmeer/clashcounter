@@ -2,7 +2,6 @@ package com.thijsvndmeer.clashcounter;
 
 import android.app.Service;
 import android.content.Intent;
-import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
@@ -19,13 +18,19 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.app.Notification;
+import android.widget.Toast;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.pm.ServiceInfo;
+import android.os.Handler;
+import android.os.Looper;
 import android.content.BroadcastReceiver;
 import android.content.IntentFilter;
 import androidx.core.app.NotificationCompat;
+import android.annotation.SuppressLint;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceError;
 
 public class OverlayService extends Service {
     private static final String TAG = "OverlayService";
@@ -63,7 +68,8 @@ public class OverlayService extends Service {
                 (int) (screenWidth * 0.9),
                 ViewGroup.LayoutParams.WRAP_CONTENT, // Dynamic height
                 layoutFlag,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
                 PixelFormat.RGBA_8888);
 
         params.gravity = Gravity.TOP | Gravity.START;
@@ -128,7 +134,6 @@ public class OverlayService extends Service {
         // Ensure the window has at least some height so it doesn't collapse to 0 while
         // loading
         touchLayout.setMinimumHeight((int) (150 * metrics.density));
-        touchLayout.setBackgroundColor(0x00000000);
 
         // Initialize WebView
         webView = new WebView(new ContextThemeWrapper(this, R.style.AppTheme));
@@ -153,31 +158,21 @@ public class OverlayService extends Service {
                 if ("com.thijsvndmeer.clashcounter.OVERLAY_RESIZE".equals(intent.getAction())) {
                     int width = intent.getIntExtra("width", params.width);
                     int height = intent.getIntExtra("height", params.height);
-
-                    // Clamp to Screen Size (Safety)
-                    android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
-                    if (width > dm.widthPixels)
-                        width = dm.widthPixels;
-                    if (height > dm.heightPixels)
-                        height = dm.heightPixels;
-
-                    params.width = width;
-                    params.height = height;
-
-                    if (touchLayout != null) {
-                        windowManager.updateViewLayout(touchLayout, params);
-                    }
+                    Log.d(TAG, "Broadcast Resize Receive: " + width + "x" + height);
+                    performResize(width, height);
                 }
             }
         };
-        if (Build.VERSION.SDK_INT >= 34) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(resizeReceiver, new IntentFilter("com.thijsvndmeer.clashcounter.OVERLAY_RESIZE"),
                     Context.RECEIVER_NOT_EXPORTED);
         } else {
             registerReceiver(resizeReceiver, new IntentFilter("com.thijsvndmeer.clashcounter.OVERLAY_RESIZE"));
         }
+
     }
 
+    @SuppressLint("SetJavaScriptEnabled")
     private void setupWebView() {
         WebSettings webSettings = webView.getSettings();
         webSettings.setJavaScriptEnabled(true);
@@ -187,9 +182,10 @@ public class OverlayService extends Service {
         webSettings.setAllowFileAccessFromFileURLs(true);
         webSettings.setAllowUniversalAccessFromFileURLs(true);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        }
+        webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+
+        // Add Javascript Interface for direct communication from the Overlay Web App
+        webView.addJavascriptInterface(new WebAppInterface(this), "AndroidOverlay");
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -213,13 +209,75 @@ public class OverlayService extends Service {
             }
 
             @Override
-            public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                Log.e(TAG, "WebView Error: " + description + " URL: " + failingUrl);
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                Log.e(TAG, "WebView Error: " + error.getDescription() + " URL: " + request.getUrl());
             }
         });
 
-        // Set background to transparent for the overlay effect
+        // Set background to transparent for the overlay effect (keep red for now if
+        // debugging, otherwise revert)
+        // touchLayout (container) has the red background, webview is transparent
         webView.setBackgroundColor(0x00000000);
+    }
+
+    private void performResize(int width, int height) {
+        // Clamp to Screen Size (Safety)
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        if (width > dm.widthPixels)
+            width = dm.widthPixels;
+        if (height > dm.heightPixels)
+            height = dm.heightPixels;
+
+        // Ensure minimum size for visibility
+        if (width < 100)
+            width = 100;
+        if (height < 100)
+            height = 100; // A bit larger than header
+
+        Log.d(TAG, "performResize: " + width + "x" + height + " (Old: " + params.width + "x" + params.height + ")");
+
+        if (width != params.width || height != params.height) {
+            params.width = width;
+            params.height = height;
+
+            if (touchLayout != null) {
+                try {
+                    windowManager.updateViewLayout(touchLayout, params);
+                    Log.d(TAG, "Window Layout Updated Successfully");
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to update window layout", e);
+                }
+            }
+        } else {
+            Log.d(TAG, "Skipping resize, dimensions unchanged");
+        }
+    }
+
+    public class WebAppInterface {
+        Context mContext;
+
+        WebAppInterface(Context c) {
+            mContext = c;
+        }
+
+        @android.webkit.JavascriptInterface
+        public void resize(final int width, final int height) {
+            Log.d(TAG, "Javascript requested resize to: " + width + "x" + height);
+
+            // DIRECT CALL via Main Thread Handler
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override
+                public void run() {
+                    performResize(width, height);
+                }
+            });
+        }
+
+        @android.webkit.JavascriptInterface
+        public void close() {
+            Log.d(TAG, "Javascript requested close");
+            OverlayService.this.stopSelf();
+        }
     }
 
     @Override
@@ -234,8 +292,9 @@ public class OverlayService extends Service {
         }
 
         String url = "file:///android_asset/public/index.html";
-        if (intent != null && intent.getStringExtra("url") != null) {
-            url = intent.getStringExtra("url");
+        String intentUrl = intent != null ? intent.getStringExtra("url") : null;
+        if (intentUrl != null) {
+            url = intentUrl;
         }
         Log.d(TAG, "onStartCommand loading url: " + url);
 

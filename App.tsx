@@ -41,8 +41,15 @@ const App: React.FC = () => {
   }, [isOverlayMode]);
 
 
-  // Enhanced Toggle for Native
+  // Enhanced Toggle for Nativezz
   const handleToggleOverlay = async () => {
+    // Check for direct Android Overlay interface (running inside the overlay)
+    const androidOverlay = (window as any).AndroidOverlay;
+    if (androidOverlay && androidOverlay.close) {
+      androidOverlay.close();
+      return;
+    }
+
     if (Capacitor.isNativePlatform()) {
       if (isOverlayMode) {
         try {
@@ -173,15 +180,34 @@ const App: React.FC = () => {
           const width = Math.ceil(scaledElementRef.current.offsetWidth * overlayScale * dpr);
           const height = Math.ceil(scaledElementRef.current.offsetHeight * overlayScale * dpr);
 
+          // Direct Interface Check (ALWAYS check this first, bypasses Capacitor check)
+          const androidOverlay = (window as any).AndroidOverlay;
+          if (androidOverlay && androidOverlay.resize) {
+            // alert(`Resize to: ${width}x${height}`);
+            androidOverlay.resize(width, height);
+            // Update a global var for debug text if we want, or just rely on the bridge status
+          }
+
           if (Capacitor.isNativePlatform()) {
-            Overlay.resize({ width, height }).catch(e => console.error("Resize failed", e));
+            Overlay.resize({ width, height }).catch(e => {
+              // Ignore standard plugin errors in overlay mode if bridge missing
+            });
           }
         }
       };
 
-      const animationFrameId = requestAnimationFrame(updateSize);
+      // Create ResizeObserver to watch for content size changes
+      const resizeObserver = new ResizeObserver(() => {
+        // Debounce slightly or just call
+        requestAnimationFrame(updateSize);
+      });
 
-      return () => cancelAnimationFrame(animationFrameId);
+      resizeObserver.observe(scaledElementRef.current);
+
+      // Also call immediately to ensure size is correct on mount/scale change
+      updateSize();
+
+      return () => resizeObserver.disconnect();
     }
   }, [isOverlayMode, overlayScale]);
 
@@ -211,6 +237,7 @@ const App: React.FC = () => {
             width: '260px',
           }}
         >
+
           {/* Row 1: Integrated Elixir Bar & Controls */}
           <div className="relative h-8 bg-[#151B26] border-b-2 border-[#0D1117] select-none overflow-hidden touch-auto">
             {/* Integrated Elixir Bar */}
