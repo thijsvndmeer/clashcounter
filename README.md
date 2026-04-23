@@ -8,6 +8,7 @@ A sophisticated, machine-learning-powered companion app for Clash Royale. This t
 -   **Machine Learning Model**: Utilizes a Ridge Regression model trained on **1,000,000+ battles** to predict the opponent's deck composition based on the cards played so far.
 -   **Context-Aware**: Analyzes elixir usage patterns and game tempo to refine predictions.
 -   **Synergy Detection**: Recognizes common card combinations (e.g., Tank + Support, Win Condition + Spell) dynamically.
+-   **In-App Benchmark Badge**: Shows subtle, live benchmark expectations (Top-1 / Top-3 deck hit-rate) for the current number of unique cards seen.
 
 ### 💧 Elixir Tracking
 -   **Real-time Elixir Bar**: Tracks the opponent's estimated elixir with high precision.
@@ -61,6 +62,13 @@ A sophisticated, machine-learning-powered companion app for Clash Royale. This t
 4.  **Analyze**:
     *   **Unlocked Phase**: The grid sorts cards by likelihood. Top cards are the best predictions for what's in their deck.
     *   **Locked Phase**: Once 8 cards are found, the UI switches to "Locked" mode. It now shows their specific hand rotation (Top Row = In Hand, Bottom Left = Next Up).
+
+## 📊 Applied ML Midterm Benchmark Notes
+
+-   Trained/evaluated with weighted simulations over the current 1,000 meta-deck candidates.
+-   10,000 simulated matches (random card reveal order) were used for benchmark generation.
+-   Result: a Bayesian reformulation produced **0.0pp Top-1 gain** versus the current match-count + frequency tie-break ranking on this dataset.
+-   Conclusion: for this deck-candidate setup, the current approach is already near the practical ceiling.
 
 ## ⚠️ Disclaimer
 

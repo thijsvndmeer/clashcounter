@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ElixirBar } from './components/ElixirBar';
 import { CardGrid } from './components/CardGrid';
+import { ModelBenchmarkBadge } from './components/ModelBenchmarkBadge';
 import { useGameStore } from './store/gameStore';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
@@ -365,9 +366,7 @@ const App: React.FC = () => {
       {/* Main Section 2: Card Grid (Scrollable) */}
       <CardGrid />
 
-      <div className="hidden md:block absolute bottom-2 right-2 text-[10px] text-gray-500 font-bold opacity-50">
-        v2.0 • Data Driven
-      </div>
+      <ModelBenchmarkBadge />
     </div>
   );
 };
